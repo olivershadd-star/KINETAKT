@@ -3,7 +3,7 @@
 # ELEKTAKT
 ### ELEKTRON-STYLE SEQUENCER · SOUND + MIDI TRACKS · FREE
 
-![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.1.0-EF343E?style=for-the-badge&labelColor=10151E)
+![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.2.0-EF343E?style=for-the-badge&labelColor=10151E)
 ![Windows](https://img.shields.io/badge/WINDOWS-10%20%2F%2011_X64-19B9FF?style=for-the-badge&labelColor=10151E)
 ![Licence](https://img.shields.io/badge/LICENCE-AGPL--3.0--or--later-F5C343?style=for-the-badge&labelColor=10151E)
 
@@ -22,9 +22,11 @@
 
 ## 01 // TÉLÉCHARGER ET LANCER — DOWNLOAD & RUN
 
-1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.1.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
+1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.2.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
 2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `ELEKTAKT.exe`.
 3. Lance **ELEKTAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
+
+![ELEKTAKT — scènes et crossfader](docs/apercu-scenes.png)
 
 *Windows peut afficher « Windows a protégé votre ordinateur » : clique sur **Informations complémentaires → Exécuter quand même** (le programme n'est pas signé, c'est normal pour un projet gratuit).*
 
@@ -41,6 +43,10 @@
 | **Probabilité** | Page TRIG, 0 à 100 % par pas. |
 | **Micro-timing** | Page TRIG, −23 à +23 vingt-quatrièmes de pas (en avance / en retard). |
 | **Retrig** | Page TRIG, 1 à 8 coups dans le pas. |
+| **Parameter slide** | Page TRIG, potard **SLIDE** sur un pas sélectionné : ses valeurs verrouillées glissent en douceur jusqu'au prochain lock du même paramètre (volume, pan, enveloppe, effets, CC MIDI). Le pas affiche « SLIDE ». |
+| **Scènes + crossfader** | En bas, onglet **SCÈNES** : 16 scènes par pattern. Clic sur une scène = édition : les potards de **toutes les pistes** écrivent dans la scène (potard vert). Clic droit = la mettre en **A** ou en **B**. Le **crossfader** passe en douceur de A à B, à la souris, à la molette ou avec un potard MIDI (clic droit = MIDI Learn). |
+| **Copier / coller** | Pas sélectionnés : **COPIER LES PAS** puis sélectionne le pas de départ et **COLLER ICI** (ou Ctrl+C / Ctrl+V). **COPIER PAGE / COLLER PAGE** pour 16 pas d'un coup. Sans sélection, Ctrl+C / Ctrl+V copie la piste entière. |
+| **Annuler** | **Ctrl+Z** annule, **Ctrl+Y** rétablit (64 niveaux) : pas, locks, réglages de piste, scènes. Les réglages de son (sample, effets choisis) ne sont pas concernés. |
 | **Longueur / vitesse par piste** | En haut : **LONGUEUR** (1 à 64 pas, molette ou glisser, clic droit = valeurs rapides) et **VITESSE** (2x, 1x, 1/2x, 1/4x, 1/8x). Des pistes de longueurs différentes créent des polyrythmies. |
 | **Longueur maître** | `INF` : les pistes tournent librement et un pattern en attente démarre toutes les 16 pas. Une valeur (1–64) relance toutes les pistes à ce rythme. |
 | **Swing** | 50 à 80 %, appliqué aux pas pairs. |
@@ -65,7 +71,7 @@ Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI 
 
 ## 04 // RACCOURCIS — SHORTCUTS
 
-`Espace` lecture / stop · `F` maintenu = FILL · `Échap` relâcher la sélection · `Suppr` effacer les locks sélectionnés · `←` `→` pages de pas · `↑` `↓` pistes · `F1`–`F8` pages de potards · `R` REC · `Ctrl+S` enregistrer · `Ctrl+O` ouvrir · `Ctrl+N` nouveau · `Ctrl+C` / `Ctrl+V` copier / coller la piste · `Maj` + potard = réglage fin.
+`Espace` lecture / stop · `F` maintenu = FILL · `Échap` relâcher la sélection · `Suppr` effacer les locks sélectionnés · `←` `→` pages de pas · `↑` `↓` pistes · `F1`–`F8` pages de potards · `R` REC · `Ctrl+S` enregistrer · `Ctrl+O` ouvrir · `Ctrl+N` nouveau · `Ctrl+C` / `Ctrl+V` copier / coller (pas sélectionnés ou piste) · `Ctrl+Z` / `Ctrl+Y` annuler / rétablir · `Maj` + potard = réglage fin.
 
 ## 05 // FICHIERS — FILES
 
@@ -76,7 +82,7 @@ Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI 
 | `.kickkit` | Kit de 16 sons et leurs réglages (compatible KICK). |
 | `.wav` | **FICHIER → Exporter le pattern en WAV** : un cycle complet, 48 kHz / 24 bits. |
 
-Les réglages des macros et des appareils MIDI sont gardés à côté de `ELEKTAKT.exe` (`ELEKTAKT-settings.txt`, `ELEKTAKT-devices.txt`).
+L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages des macros, du crossfader et des appareils MIDI sont gardés à côté de `ELEKTAKT.exe` (`ELEKTAKT-settings.txt`, `ELEKTAKT-devices.txt`).
 
 ## 06 // FEUILLE DE ROUTE — ROADMAP
 
@@ -84,7 +90,8 @@ Les réglages des macros et des appareils MIDI sont gardés à côté de `ELEKTA
 - [x] Parameter locks, trigless locks, trig conditions, probabilité, micro-timing, retrig
 - [x] Pistes son (samples + 4 effets) et pistes MIDI, horloge MIDI
 - [x] Macros M1–M8 avec MIDI Learn, import des projets KICK
-- [ ] Scènes et parameter slide
+- [x] Scènes avec crossfader A/B, parameter slide (0.2.0)
+- [x] Copier / coller de pas et de pages, annuler / rétablir (0.2.0)
 - [ ] Version VST3 pour Ableton
 
 ## 07 // COMPILER — BUILD FROM SOURCE

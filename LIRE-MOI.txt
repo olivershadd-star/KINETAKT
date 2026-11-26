@@ -10,6 +10,9 @@ DÉMARRER
 5. Page TRIG : probabilité, CONDITION (1:4, FILL, PRE, NEI, 1ST…), micro-timing, retrig.
 6. Chaque piste a sa propre LONGUEUR (1 à 64 pas) et sa VITESSE (2x à 1/8x).
 7. Glisse un fichier WAV sur une piste pour charger ton propre son.
+8. SLIDE (page TRIG) : les valeurs verrouillées d'un pas glissent jusqu'au lock suivant.
+9. SCÈNES (en bas) : clic sur une scène pour l'éditer, clic droit pour la mettre en A ou B,
+   puis le crossfader passe de A à B (assignable à un potard MIDI par clic droit).
 
 ENVOYER LE MIDI VERS ABLETON (pistes MIDI + horloge)
 1. Installe loopMIDI (gratuit) : https://www.tobias-erichsen.de/software/loopmidi.html
@@ -23,4 +26,5 @@ ENVOYER LE MIDI VERS ABLETON (pistes MIDI + horloge)
 RACCOURCIS
 Espace = lecture/stop · F (maintenu) = FILL · Échap = relâcher la sélection
 Suppr = effacer les locks des pas sélectionnés · ←/→ pages de pas · ↑/↓ pistes
-Ctrl+S enregistrer · Ctrl+O ouvrir · Ctrl+N nouveau · Ctrl+C / Ctrl+V copier/coller la piste
+Ctrl+S enregistrer · Ctrl+O ouvrir · Ctrl+N nouveau · Ctrl+Z annuler · Ctrl+Y rétablir
+Ctrl+C / Ctrl+V copier/coller les pas sélectionnés (ou la piste entière sans sélection)

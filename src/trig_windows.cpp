@@ -265,8 +265,11 @@ public:
         case 3:ui->page=1;ui->wheel(376+60,520,3,0);break; // PITCH lock
         case 4:click(100,124+15*46+20);click(376+330+110,148);break; // track 16 → MIDI
         case 5:click(376+20,280);break;              // trig
-        case 6:ui->key(trig::KeySpace,true,0);break; // stop
-        case 7:InvalidateRect(window,nullptr,FALSE);break;
+        case 6:click(376+126+20,670);click(376+75+20,720);break;   // scenes view, edit scene 2
+        case 7:ui->page=2;ui->wheel(376+151+40,500,-5,0);click(376+90+400,784);break; // scene value + crossfader
+        case 8:ui->key('Z',true,trig::ModControl);ui->key('Y',true,trig::ModControl);break; // undo / redo
+        case 9:ui->key(trig::KeySpace,true,0);break; // stop
+        case 10:InvalidateRect(window,nullptr,FALSE);break;
         default:DestroyWindow(window);break;
         }
     }

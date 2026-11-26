@@ -105,9 +105,39 @@ int main(int argc,char** argv){
      const auto exported=(dir/"export.wav").u8string();check(e->exportCurrentPatternWav(exported,error),"export: "+error);
      const auto bytes=std::filesystem::file_size(std::filesystem::u8path(exported));check(bytes==44+size_t(std::llround(32*sf))*6,"export covers the longest track (32 steps): "+std::to_string(bytes));
      MidiEvent m;int leaked=0;while(e->popMidi(m))if(m.message==0xF8)++leaked;check(leaked==0,"no MIDI clock during WAV export");}
-    // 9. Condition names.
+    // 9. v0.2 — parameter slide on a MIDI CC: values glide from 0 to 127 over 4 steps.
+    {Rig r;auto t=midiTrack(0);t.ccNumber[0]=20;r.engine->trigSetTrackConfig(0,t);
+     TrigStep st;st.trig=true;st.slide=true;r.engine->trigSetStep(0,0,st);r.engine->trigSetLock(0,0,TrigCcFirst,0);
+     r.engine->trigSetLock(0,4,TrigCcFirst,1); // trigless target on step 5
+     r.engine->setPlaying(true);r.run(int(5*sf/Block));
+     std::vector<int> values;for(auto& e:r.midi)if((e.message&0xF0)==0xB0&&((e.message>>8)&127)==20)values.push_back(int((e.message>>16)&127));
+     bool rising=values.size()>10;for(size_t i=1;i<values.size();++i)rising=rising&&values[i]>=values[i-1];
+     check(rising&&values.front()==0&&values.back()==127,"slide sends a rising CC ramp 0→127 ("+std::to_string(values.size())+" values)");}
+    // 10. v0.2 — scenes and crossfader.
+    {Rig r;auto t=midiTrack(3);t.ccNumber[1]=30;r.engine->trigSetTrackConfig(2,t);
+     check(r.engine->trigSetSceneValue(0,2,TrigCcFirst+1,0)&&r.engine->trigSetSceneValue(1,2,TrigCcFirst+1,1),"scene values written");
+     r.engine->setCrossfader(.5);r.run(2);
+     int last=-1;for(auto& e:r.midi)if((e.message&0xF0)==0xB0&&((e.message>>8)&127)==30)last=int((e.message>>16)&127);
+     check(last==64,"crossfader halfway sends CC 64, got "+std::to_string(last));
+     r.engine->setCrossfader(1);r.run(2);for(auto& e:r.midi)if((e.message&0xF0)==0xB0&&((e.message>>8)&127)==30)last=int((e.message>>16)&127);check(last==127,"crossfader at B sends 127");
+     // Audio: scene A sets LEVEL 0 on track 1, fader on A silences its trigs.
+     std::string error;check(r.engine->load(0,sample,error),"scene sample");r.engine->trigToggle(0,0);r.engine->trigSetSceneValue(0,0,TrigLevel,0);r.engine->setCrossfader(0);
+     r.audio.clear();r.engine->setPlaying(true);r.run(int(4*sf/Block));double e=0;for(size_t i=0;i<3000&&i<r.audio.size();++i)e+=r.audio[i];check(e<1e-3,"scene A LEVEL 0 silences the track");
+     r.engine->stop();r.engine->setCrossfader(1);r.audio.clear();r.engine->setPlaying(true);r.run(int(4*sf/Block));e=0;for(size_t i=0;i<3000&&i<r.audio.size();++i)e+=r.audio[i];check(e>10,"fader on B (no level) restores the sound");}
+    // 11. v0.2 — persistence of slides, scenes and A/B, and whole-pattern replace.
+    {std::string error;auto e=std::make_unique<Engine>();TrigStep st;st.trig=true;st.slide=true;e->trigSetStep(1,3,st);e->trigSetSceneValue(5,7,TrigDecay,.25);e->trigSetSceneAB(5,9);
+     const auto file=(dir/"v2.elektakt").u8string();check(e->save(file,error),"v2 save");
+     auto f=std::make_unique<Engine>();check(f->open(file,error)&&error.empty(),"v2 open: "+error);auto s=std::make_unique<Snapshot>(f->snapshot());const auto& p=s->sequences[0].trig;
+     check(p.tracks[1].steps[3].slide,"slide restored");check(p.sceneA==5&&p.sceneB==9,"scene A/B restored");
+     const int at=p.scenes[5].find(7,TrigDecay);check(at>=0&&p.scenes[5].locks[size_t(at)].value==250,"scene value restored");
+     TrigPattern empty;f->trigSetPattern(0,empty);s=std::make_unique<Snapshot>(f->snapshot());check(!s->sequences[0].trig.tracks[1].steps[3].slide&&s->sequences[0].trig.scenes[5].count==0,"pattern replaced");}
+    // 12. Live state reaches the interface snapshot (playheads, fill, clock, crossfader).
+    {Rig r;auto t=midiTrack(0);t.length=4;r.engine->trigSetTrackConfig(0,t);r.engine->setFill(true);r.engine->setMidiClockOut(false);r.engine->setCrossfader(.3);
+     r.engine->setPlaying(true);r.run(int(2.5*sf/Block));auto s=std::make_unique<Snapshot>(r.engine->snapshot());
+     check(s->trigPlayStep[0]==2,"playhead reaches step 3: "+std::to_string(s->trigPlayStep[0]));check(s->fill&&!s->midiClockOut&&std::abs(s->crossfader-.3)<1e-9,"fill / clock / crossfader visible in snapshot");}
+    // 12. Condition names.
     check(trigConditionName(trigConditionFromCycle(1,4))=="1:4","cycle label");check(trigConditionCount()==44,"condition count");
     for(int code=0;code<trigConditionCount();++code){int a=0,b=0;if(trigConditionCycle(code,a,b))check(trigConditionFromCycle(a,b)==code,"cycle code round trip");}
     if(failures){std::cerr<<failures<<" TRIG test(s) failed\n";return 1;}
-    std::cout<<"PASS: TRIG timing, length/speed, conditions, locks, micro, retrig, MIDI/clock, save/open, KICK import\n";return 0;
+    std::cout<<"PASS: timing, length/speed, conditions, locks, micro, retrig, MIDI/clock, slides, scenes, save/open, KICK import, live state\n";return 0;
 }

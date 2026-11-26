@@ -56,7 +56,7 @@ jobs:
           New-Item -ItemType Directory -Force "$folder/demo-kit","$folder/samples","$folder/projets" | Out-Null
           Copy-Item build/Release/ELEKTAKT.exe "$folder/"
           Copy-Item demo-kit/*.wav "$folder/demo-kit/"
-          Copy-Item LIRE-MOI.txt,README.md,NOTICES.txt,LICENSE "$folder/"
+          Copy-Item LIRE-MOI.txt,README.md,CHANGELOG.md,NOTICES.txt,LICENSE "$folder/"
           Compress-Archive -Path $folder -DestinationPath "dist/ELEKTAKT-Windows-x64-$version.zip" -Force
 
       - name: Publish release
@@ -73,5 +73,6 @@ jobs:
 
             Télécharge `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous, extrais-le entièrement et lance `ELEKTAKT.exe`.
             Aucune installation. Pour envoyer le MIDI vers Ableton, installe loopMIDI (gratuit) — voir le README.
+            Nouveautés : voir CHANGELOG.md (aussi dans le ZIP).
 
             Download `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` below, extract it and run `ELEKTAKT.exe`. No installation needed.

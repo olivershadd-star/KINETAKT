@@ -152,10 +152,11 @@ struct TrigStep {
     uint8_t condition=TrigCondNone;
     int8_t micro=0;          // −23..+23, in 1/24 of a step
     uint8_t retrig=1;        // 1–8 hits inside the step
+    bool slide=false;        // locked values glide to the next lock of the track
     uint8_t lockCount=0;
     std::array<TrigLock,TrigLocksPerStep> locks{};
     int findLock(int param)const{for(int i=0;i<lockCount;++i)if(locks[i].param==param)return i;return -1;}
-    bool empty()const{return !trig&&lockCount==0;}
+    bool empty()const{return !trig&&lockCount==0&&!slide;}
 };
 // Track speed: 2x, 1x, 1/2, 1/4, 1/8 of the sixteenth-note clock.
 constexpr int TrigSpeeds=5;
@@ -173,7 +174,18 @@ struct TrigTrack {
     std::array<int16_t,TrigMidiCcs> ccValue{{-1,-1,-1,-1,-1,-1,-1,-1}}; // −1 = not sent
     std::array<TrigStep,TrigMaxSteps> steps{};
 };
+// A scene stores values for any track/parameter. The crossfader morphs from
+// scene A to scene B; parameters missing in a scene keep their own value.
+constexpr int TrigScenes=16, TrigSceneLocks=64;
+struct TrigSceneLock { uint8_t track=0, param=0; int16_t value=0; };
+struct TrigScene {
+    uint8_t count=0;
+    std::array<TrigSceneLock,TrigSceneLocks> locks{};
+    int find(int track,int param)const{for(int i=0;i<count;++i)if(locks[i].track==track&&locks[i].param==param)return i;return -1;}
+};
 struct TrigPattern {
+    int sceneA=0, sceneB=1;
+    std::array<TrigScene,TrigScenes> scenes{};
     // 0 = INF: tracks run freely and a queued pattern changes every 16 steps.
     int masterLength=0;
     int swing=50;            // 50–80 %
@@ -243,6 +255,7 @@ struct Snapshot {
     std::array<int,TrigTracks> trigPlayStep{};
     std::array<bool,TrigTracks> trigFlash{};
     bool fill=false,midiClockOut=true;
+    double crossfader=0;      // 0 = scene A, 1 = scene B
 };
 class Engine {
 public:
@@ -367,6 +380,13 @@ public:
     uint64_t renderedFrames()const;
     // Converts the steps of a KICK project into TRIG tracks.
     void trigImportKickSteps();
+    // Replaces a whole pattern (used by undo / paste).
+    void trigSetPattern(int sequence,const TrigPattern& pattern);
+    bool trigSetSceneValue(int scene,int track,int param,double normalised);
+    void trigClearSceneValue(int scene,int track,int param);
+    void trigClearScene(int scene);
+    void trigSetSceneAB(int a,int b);
+    void setCrossfader(double position);
 private:
     bool openKick(const std::string&,std::string& error);
     struct Impl; std::unique_ptr<Impl> impl;

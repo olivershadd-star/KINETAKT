@@ -71,6 +71,21 @@ int main(int argc,char** argv){
     ui.mouseDown(376+2*74+20,280,1,0);ui.page=2;ui.wheel(376+151+40,500,10,0);
     s=std::make_unique<lab::Snapshot>(engine->snapshot());const auto& tl=s->sequences[0].trig.tracks[0].steps[2];std::cout<<"step3 trig="<<tl.trig<<" locks="<<int(tl.lockCount)<<"\n";
     shot(ui,"ui-6-macro-trigless.png");
+    // v0.2: slide on a latched step, copy/paste, undo, scenes + crossfader.
+    ui.key(KeyEscape,true,0);ui.mouseDown(100,124+12*46+20,0,0);ui.mouseUp(0,0,0);ui.page=0;
+    ui.mouseDown(376+20,280,1,0);ui.wheel(376+7*151+60,520,1,0);   // latch step 1, SLIDE = OUI
+    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"slide step1="<<s->sequences[0].trig.tracks[12].steps[0].slide<<"\n";
+    ui.key('C',true,ModControl);ui.key(KeyEscape,true,0);ui.mouseDown(376+74*1+20,280,1,0);ui.key('V',true,ModControl); // paste on step 2
+    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"pasted step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<" slide="<<s->sequences[0].trig.tracks[12].steps[1].slide<<"\n";
+    ui.key('Z',true,ModControl);s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"after undo step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<"\n";
+    ui.key('Y',true,ModControl);s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"after redo step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<"\n";
+    shot(ui,"ui-7-slide.png");
+    ui.key(KeyEscape,true,0);ui.mouseDown(376+126+20,670,0,0);ui.mouseUp(0,0,0);          // SCÈNES view
+    ui.mouseDown(376+1*75+20,720,0,0);ui.mouseUp(0,0,0);                                  // edit scene 2
+    ui.page=2;ui.wheel(376+151+40,500,-30,0);                                              // track 13 DECAY into scene 2
+    ui.mouseDown(376+90+400,784,0,0);std::cout<<"fader click: "<<ui.status<<"\n";ui.mouseUp(0,0,0);                                   // crossfader
+    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"scene2 values="<<int(s->sequences[0].trig.scenes[1].count)<<" fader="<<s->crossfader<<"\n";
+    shot(ui,"ui-8-scenes.png");
     std::cout<<"status: "<<ui.status<<"\n";
     return 0;
 }

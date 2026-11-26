@@ -13,6 +13,7 @@
 #include <sstream>
 #include <limits>
 #include <cstdio>
+#include <initializer_list>
 #include "AudIO.cpp"
 // DawInserts normally gets this shared empty value from DawEngine.cpp.  The
 // Windows prototype deliberately keeps the much larger DAW core disabled.
@@ -244,6 +245,17 @@ struct Engine::Impl {
     std::atomic<uint64_t> frames{0};
     std::mutex midiMutex;std::deque<MidiEvent> midiQueue;
     bool exporting=false;
+    // v0.2: scenes and parameter slides act on the running sound.
+    struct Glide { uint8_t param=0; double from=0,to=0,elapsed=0,total=1; };
+    std::array<std::array<Glide,TrigLocksPerStep>,TrigTracks> glides{};
+    std::array<int,TrigTracks> glideCount{};
+    std::array<PadEdit,Pads> trigEdit{};std::array<bool,Pads> trigEditValid{},liveTouched{};
+    std::array<double,Pads> livePan{};
+    std::array<std::array<std::array<int,6>,InsertSlots>,Pads> liveFx{};
+    std::array<std::array<double,TrigParamCount>,TrigTracks> sceneValue{};
+    void trigLive();
+    void addGlide(int track,int param,double from,double to,double samples);
+    double sceneOverride(int track,int param)const{return sceneValue[size_t(track)][size_t(param)];}
     uint64_t blockFrame=0;double blockStartSteps=0,samplesPerStep=6000;
     void pushMidi(uint64_t frame,uint32_t message){if(exporting)return;std::lock_guard<std::mutex> lock(midiMutex);if(midiQueue.size()<16384)midiQueue.push_back({frame,message});}
     void resetLocks(int pad){lockedPan[pad]=std::numeric_limits<double>::quiet_NaN();for(auto& slot:lockedFx[pad])slot.fill(-1);}
@@ -255,6 +267,7 @@ struct Engine::Impl {
     void trigFire(int track,const TrigTrack& tr,const TrigStep& st,long long k,int length,uint64_t frame,double stepSamples,const SequenceData& sequence,bool anySolo);
     Impl():pool(512*Block) {
         for(int pad=0;pad<Pads;++pad)resetLocks(pad);for(auto& t:trigSentCc)t.fill(-1);
+        livePan.fill(std::numeric_limits<double>::quiet_NaN());for(auto& pad:liveFx)for(auto& slot:pad)slot.fill(-1);for(auto& t:sceneValue)t.fill(std::numeric_limits<double>::quiet_NaN());
         for(auto& pad:appliedEffectAutomation)for(auto& slot:pad)slot.fill(-2);
         AudIO::MemoryPool<float>::get().initialize(pool.data(),512,Block);
         graph=std::make_unique<AudIO::Design>(0,2);
@@ -627,6 +640,7 @@ Snapshot Engine::snapshot(){
     Snapshot result;
     {std::lock_guard<std::mutex> lock(impl->mutex);const auto& state=impl->state;result.active=state.active;result.edits=state.edits;result.progress=state.progress;result.sequences=state.sequences;result.programs=state.programs;result.song=state.song;
      result.tempo=state.tempo;result.volume=state.volume;result.playing=state.playing;result.songPlaying=state.songPlaying;result.noteRepeat=state.noteRepeat;result.arpeggiator=state.arpeggiator;result.repeatDivision=state.repeatDivision;result.step=state.step;result.playBar=state.playBar;result.viewBar=state.viewBar;result.sequence=state.sequence;result.queuedSequence=state.queuedSequence;result.group=state.group;result.queuedGroup=state.queuedGroup;result.program=state.program;result.queuedProgram=state.queuedProgram;result.selectedTrack=state.selectedTrack;result.songLength=state.songLength;result.songPosition=state.songPosition;result.songRepeat=state.songRepeat;result.mixPeak=state.mixPeak;result.peak=state.peak;result.preLimiterPeak=state.preLimiterPeak;result.limiterReductionDb=state.limiterReductionDb;result.trackPeaks=state.trackPeaks;
+     result.trigPlayStep=state.trigPlayStep;result.trigFlash=state.trigFlash;result.fill=state.fill;result.midiClockOut=state.midiClockOut;result.crossfader=state.crossfader;
      const auto& sequence=state.sequences[state.sequence];const int first=state.viewBar*Steps;result.melody.fill(-1);for(int p=0;p<Pads;++p)for(int step=0;step<Steps;++step)result.pattern[p][step]=sequence.drum[p][first+step];for(int step=0;step<Steps;++step)result.melody[step]=sequence.melody[first+step];}
     {std::lock_guard<std::mutex> lock(impl->metadataMutex);for(int pad=0;pad<Pads;++pad){const auto& bank=impl->banks[result.program][pad];const auto& primary=bank.layers[0];result.names[pad]=primary.name;result.paths[pad]=primary.path;result.waveforms[pad]=primary.waveform;result.durations[pad]=primary.duration;for(int layer=0;layer<PadLayers;++layer){const auto& source=bank.layers[layer];result.layers[pad][layer]={source.name,source.path,source.duration,source.velocityStart,source.velocityEnd,source.reverse,source.loaded};}}}
     return result;
@@ -649,7 +663,7 @@ void Engine::render(float* out){
         for(int p=0;p<Pads;++p){const auto& track=sequence.tracks[p];const auto& edit=s.edits[p];const auto& automation=sequence.trackAutomation[p];
             const double level=automationValue(automation.level,total,absoluteStep,track.level);
             const double pan=automationValue(automation.pan,total,absoluteStep,(track.pan+1.)*.5)*2.-1.;
-            const double padPan=std::isnan(impl->lockedPan[p])?edit.pan:impl->lockedPan[p];
+            const double padPan=!std::isnan(impl->livePan[p])?impl->livePan[p]:(std::isnan(impl->lockedPan[p])?edit.pan:impl->lockedPan[p]);
             impl->players[p]->projectTempo=s.tempo;impl->players[p]->setTrackMix(level*(edit.mute?0.:1.),std::clamp(pan+padPan,-1.,1.));
         }
     };
@@ -657,7 +671,7 @@ void Engine::render(float* out){
         const auto& sequence=s.sequences[s.sequence];const int total=sequence.bars*Steps;
         std::array<std::array<std::array<int,InsertParameters>,InsertSlots>,Pads> desired{};for(auto& pad:desired)for(auto& slot:pad)slot.fill(AutomationUnset);
         if(absoluteStep>=0)for(const auto& lane:sequence.effectAutomation)if(lane.pad>=0&&lane.pad<Pads&&lane.slot>=0&&lane.slot<InsertSlots&&lane.parameter>=0&&lane.parameter<InsertParameters){const double held=automationValue(lane.values,total,absoluteStep,-1.);if(held>=0)desired[lane.pad][lane.slot][lane.parameter]=std::clamp(int(std::lround(held*AutomationResolution)),0,AutomationResolution);}
-        for(int pad=0;pad<Pads;++pad)for(int slot=0;slot<InsertSlots;++slot){const int count=insertParameterCount(s.edits[pad].inserts[slot].effect);for(int parameter=0;parameter<count;++parameter){int requested=desired[pad][slot][parameter];if(parameter<6&&impl->lockedFx[pad][slot][parameter]>=0)requested=impl->lockedFx[pad][slot][parameter];auto& applied=impl->appliedEffectAutomation[pad][slot][parameter];if(requested==applied)continue;const double value=requested==AutomationUnset?s.edits[pad].inserts[slot].parameters[parameter]:requested/double(AutomationResolution);impl->players[pad]->effects->setEffectParameter(slot,parameter,float(value));applied=requested;}}
+        for(int pad=0;pad<Pads;++pad)for(int slot=0;slot<InsertSlots;++slot){const int count=insertParameterCount(s.edits[pad].inserts[slot].effect);for(int parameter=0;parameter<count;++parameter){int requested=desired[pad][slot][parameter];if(parameter<6&&impl->liveFx[pad][slot][parameter]>=0)requested=impl->liveFx[pad][slot][parameter];else if(parameter<6&&impl->lockedFx[pad][slot][parameter]>=0)requested=impl->lockedFx[pad][slot][parameter];auto& applied=impl->appliedEffectAutomation[pad][slot][parameter];if(requested==applied)continue;const double value=requested==AutomationUnset?s.edits[pad].inserts[slot].parameters[parameter]:requested/double(AutomationResolution);impl->players[pad]->effects->setEffectParameter(slot,parameter,float(value));applied=requested;}}
     };
     auto& activeSequence=s.sequences[s.sequence];bool anySolo=false;for(const auto& track:activeSequence.tracks)anySolo=anySolo||track.solo;
     applyTrackMix(s.playing?std::max(0,s.playBar*Steps+std::max(0,s.step)):-1);

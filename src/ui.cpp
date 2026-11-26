@@ -37,20 +37,23 @@ const Rect TrackType{MainX+330,128,150,40},TrackLength{MainX+490,128,110,40},Tra
 const Rect TrackCopy{MainX+972,128,74,40},TrackPaste{MainX+1052,128,74,40},TrackClear{MainX+1132,128,76,40};
 constexpr int PagesY=180;
 Rect stepPageRect(int p){return {MainX+p*96,PagesY,90,30};}
-const Rect FollowRect{MainX+392,PagesY,104,30};
+const Rect FollowRect{MainX+392,PagesY,104,30},PageCopy{MainX+504,PagesY,120,30},PagePaste{MainX+630,PagesY,120,30};
 constexpr int StepY=232,StepH=96,StepW=70,StepGapSmall=4,StepGapBeat=12;
 Rect stepRect(int i){const int beat=i/4,inBeat=i%4;const int x=MainX+beat*(4*StepW+3*StepGapSmall+StepGapBeat)+inBeat*(StepW+StepGapSmall);return {x,StepY,StepW,StepH};}
-const Rect LatchInfo{MainX,346,700,30},LatchClear{MainX+880,346,160,30},LatchRelease{MainX+1048,346,160,30};
+const Rect LatchInfo{MainX,346,520,30},LatchCopy{MainX+544,346,160,30},LatchPaste{MainX+712,346,160,30},LatchClear{MainX+880,346,160,30},LatchRelease{MainX+1048,346,160,30};
 constexpr int TabY=392,TabH=36;
 constexpr int KnobY=440,KnobH=196,KnobW=151;
 Rect knobRect(int i){return {MainX+i*KnobW,KnobY,KnobW-6,KnobH};}
 const Rect FxEffect{MainX+620,TabY,360,TabH},FxBypass{MainX+988,TabY,104,TabH};
 constexpr int MacroY=660,MacroH=196;
 Rect macroRect(int i){return {MainX+i*KnobW,MacroY+34,KnobW-6,MacroH-34};}
+const Rect ViewMacros{MainX,MacroY,120,28},ViewScenes{MainX+126,MacroY,120,28};
+Rect sceneRect(int i){return {MainX+i*75,MacroY+42,70,42};}
+const Rect Crossfader{MainX+90,MacroY+104,MainW-180,40};
 
-enum class Field { Note=0, Velocity, Length, Probability, Condition, Micro, Retrig, Count };
+enum class Field { Note=0, Velocity, Length, Probability, Condition, Micro, Retrig, Slide, Count };
 struct Knob {
-    std::string label,display;double value=0;bool enabled=false,locked=false;
+    std::string label,display;double value=0;bool enabled=false,locked=false,scene=false;
     int kind=0;     // 0 none, 1 lockable parameter, 2 trig field
     int id=0;       // TrigParam or Field
     int ccSlot=-1;  // MIDI CC page: slot index (its CC number is editable)
@@ -68,15 +71,48 @@ struct TrigUI::Impl {
     std::array<Macro,8> macros{};int learnMacro=-1;
     std::unique_ptr<TrigTrack> trackClipboard;std::unique_ptr<TrigPattern> patternClipboard;
     int tickCount=0;
+    // v0.2: scenes, clipboards, undo.
+    bool sceneView=false;int editScene=-1;bool dragFader=false;int faderChannel=-1,faderCc=-1;bool learnFader=false;
+    std::vector<std::pair<int,TrigStep>> stepClipboard;std::unique_ptr<std::array<TrigStep,16>> pageClipboard;std::unique_ptr<TrigScene> sceneClipboard;
+    std::vector<std::pair<int,TrigPattern>> undoStack,redoStack;std::unique_ptr<TrigPattern> committed;int committedSequence=-1;
+    bool undoCheck=false,gestureOpen=false,gesturePushed=false;int lastChangeTick=-100;std::string lastGesture,gesture;
     Impl(TrigUI& owner,Engine& e,Host& h,std::filesystem::path dir):ui(owner),engine(e),host(h),base(std::move(dir)){loadSettings();}
 
     // ----- state helpers -----
-    void refresh(){*snap=engine.snapshot();playing=snap->playing;}
+    void refresh(){*snap=engine.snapshot();playing=snap->playing;if(undoCheck){undoCheck=false;trackUndo();}else if(committedSequence!=snap->sequence)commit();}
+    // ----- undo: the sequencer data of the current pattern is versioned -----
+    static bool sameStep(const TrigStep& a,const TrigStep& b){
+        if(a.trig!=b.trig||a.note!=b.note||a.velocity!=b.velocity||a.length!=b.length||a.probability!=b.probability||a.condition!=b.condition||a.micro!=b.micro||a.retrig!=b.retrig||a.slide!=b.slide||a.lockCount!=b.lockCount)return false;
+        for(int i=0;i<a.lockCount;++i)if(a.locks[size_t(i)].param!=b.locks[size_t(i)].param||a.locks[size_t(i)].value!=b.locks[size_t(i)].value)return false;return true;
+    }
+    static bool samePattern(const TrigPattern& a,const TrigPattern& b){
+        if(a.masterLength!=b.masterLength||a.swing!=b.swing||a.sceneA!=b.sceneA||a.sceneB!=b.sceneB)return false;
+        for(int sc=0;sc<TrigScenes;++sc){const auto& x=a.scenes[size_t(sc)];const auto& y=b.scenes[size_t(sc)];if(x.count!=y.count)return false;for(int i=0;i<x.count;++i)if(x.locks[size_t(i)].track!=y.locks[size_t(i)].track||x.locks[size_t(i)].param!=y.locks[size_t(i)].param||x.locks[size_t(i)].value!=y.locks[size_t(i)].value)return false;}
+        for(int t=0;t<TrigTracks;++t){const auto& x=a.tracks[size_t(t)];const auto& y=b.tracks[size_t(t)];
+            if(x.type!=y.type||x.length!=y.length||x.speed!=y.speed||x.midiChannel!=y.midiChannel||x.defaultNote!=y.defaultNote||x.defaultVelocity!=y.defaultVelocity||x.defaultLength!=y.defaultLength||x.ccNumber!=y.ccNumber||x.ccValue!=y.ccValue)return false;
+            for(int i=0;i<TrigMaxSteps;++i)if(!sameStep(x.steps[size_t(i)],y.steps[size_t(i)]))return false;}
+        return true;
+    }
+    void commit(){committed=std::make_unique<TrigPattern>(pattern());committedSequence=snap->sequence;}
+    void trackUndo(){
+        if(!committed||committedSequence!=snap->sequence){commit();return;}
+        if(samePattern(*committed,pattern()))return;
+        const bool coalesce=(gestureOpen&&gesturePushed)||(!gestureOpen&&!gesture.empty()&&gesture==lastGesture&&tickCount-lastChangeTick<20);
+        if(!coalesce){undoStack.emplace_back(committedSequence,*committed);if(undoStack.size()>64)undoStack.erase(undoStack.begin());redoStack.clear();}
+        if(gestureOpen)gesturePushed=true;lastGesture=gesture;lastChangeTick=tickCount;commit();
+    }
+    void undo(bool redo){
+        auto& from=redo?redoStack:undoStack;auto& to=redo?undoStack:redoStack;if(from.empty()){status(redo?"Rien à rétablir.":"Rien à annuler.");return;}
+        refresh();auto entry=std::move(from.back());from.pop_back();
+        if(entry.first!=snap->sequence){engine.selectSequence(entry.first);refresh();}
+        to.emplace_back(snap->sequence,pattern());engine.trigSetPattern(entry.first,entry.second);ui.latched.clear();
+        *snap=engine.snapshot();commit();ui.dirty=true;updateTitle();status(redo?"Rétabli.":"Annulé (Ctrl+Y pour rétablir).");
+    }
     const TrigPattern& pattern()const{return snap->sequences[snap->sequence].trig;}
     const TrigTrack& track(int t)const{return pattern().tracks[std::clamp(t,0,TrigTracks-1)];}
     const TrigTrack& current()const{return track(ui.selectedTrack);}
     bool isMidi(int t)const{return track(t).type==TrigTrackType::Midi;}
-    void changed(){ui.dirty=true;updateTitle();}
+    void changed(){ui.dirty=true;undoCheck=true;updateTitle();}
     void updateTitle(){host.setTitle("ELEKTAKT — "+(project.empty()?std::string("Nouveau projet"):project.filename().u8string())+(ui.dirty?" *":""));}
     std::string trackName(int t)const{
         if(isMidi(t))return "MIDI · canal "+std::to_string(track(t).midiChannel+1);
@@ -106,6 +142,7 @@ struct TrigUI::Impl {
             case Field::Condition:minimum=0;maximum=trigConditionCount()-1;value=step?step->condition:0;text=trigConditionName(value);k.enabled=step!=nullptr;break;
             case Field::Micro:minimum=-23;maximum=23;value=step?step->micro:0;{char buffer[16];std::snprintf(buffer,sizeof(buffer),"%+d/24",value);text=value==0?"0":buffer;}k.enabled=step!=nullptr;break;
             case Field::Retrig:minimum=1;maximum=8;value=step?step->retrig:1;text="x"+std::to_string(value);k.enabled=step!=nullptr;break;
+            case Field::Slide:minimum=0;maximum=1;value=step&&step->slide?1:0;text=value?"OUI":"NON";k.enabled=step!=nullptr;break;
             default:break;
             }
             k.value=maximum>minimum?double(value-minimum)/(maximum-minimum):0;k.display=k.enabled?text:"—";
@@ -116,11 +153,13 @@ struct TrigUI::Impl {
             double base=id>=TrigCcFirst?std::max(0,int(tr.ccValue[size_t(id-TrigCcFirst)]))/127.:trigParamBase(edit,id);
             k.label=trigParamName(id,&edit);
             if(id>=TrigCcFirst){k.ccSlot=id-TrigCcFirst;k.label="CC "+std::to_string(tr.ccNumber[size_t(k.ccSlot)]);}
-            double value=base;if(step){const int index=step->findLock(id);if(index>=0){value=step->locks[size_t(index)].value/double(TrigLockResolution);k.locked=true;}}
+            double value=base;
+            if(editScene>=0){const auto& sc=pattern().scenes[size_t(editScene)];const int at=sc.find(t,id);if(at>=0){value=sc.locks[size_t(at)].value/double(TrigLockResolution);k.scene=true;}}
+            else if(step){const int index=step->findLock(id);if(index>=0){value=step->locks[size_t(index)].value/double(TrigLockResolution);k.locked=true;}}
             k.value=value;k.display=trigParamDisplay(id,value);
             if(id>=TrigCcFirst&&!k.locked&&tr.ccValue[size_t(id-TrigCcFirst)]<0)k.display="—";
         };
-        if(ui.page==0){field(0,Field::Note,"NOTE");field(1,Field::Velocity,"VÉLOCITÉ");field(2,Field::Length,"LONGUEUR");field(3,Field::Probability,"PROBABILITÉ");field(4,Field::Condition,"CONDITION");field(5,Field::Micro,"MICRO");field(6,Field::Retrig,"RETRIG");}
+        if(ui.page==0){field(0,Field::Note,"NOTE");field(1,Field::Velocity,"VÉLOCITÉ");field(2,Field::Length,"LONGUEUR");field(3,Field::Probability,"PROBABILITÉ");field(4,Field::Condition,"CONDITION");field(5,Field::Micro,"MICRO");field(6,Field::Retrig,"RETRIG");field(7,Field::Slide,"SLIDE");}
         else if(isMidi(t)){for(int c=0;c<TrigMidiCcs;++c)param(c,TrigCcFirst+c);}
         else if(ui.page==1){param(0,TrigPitch);param(1,TrigStart);param(2,TrigEnd);param(3,TrigLevel);param(4,TrigPan);}
         else if(ui.page==2){param(0,TrigAttack);param(1,TrigDecay);param(2,TrigSustain);param(3,TrigRelease);}
@@ -130,12 +169,15 @@ struct TrigUI::Impl {
         }
         return result;
     }
-    static int fieldRange(Field f,int& minimum){switch(f){case Field::Note:minimum=0;return 127;case Field::Velocity:minimum=1;return 127;case Field::Length:minimum=1;return 64;case Field::Probability:minimum=0;return 100;case Field::Condition:minimum=0;return trigConditionCount()-1;case Field::Micro:minimum=-23;return 23;case Field::Retrig:minimum=1;return 8;default:minimum=0;return 1;}}
+    static int fieldRange(Field f,int& minimum){switch(f){case Field::Note:minimum=0;return 127;case Field::Velocity:minimum=1;return 127;case Field::Length:minimum=1;return 64;case Field::Probability:minimum=0;return 100;case Field::Condition:minimum=0;return trigConditionCount()-1;case Field::Micro:minimum=-23;return 23;case Field::Retrig:minimum=1;return 8;case Field::Slide:minimum=0;return 1;default:minimum=0;return 1;}}
     static double paramResolution(int id){if(id==TrigPitch)return 48;if(id>=TrigCcFirst)return 127;return 100;}
     // Sets a lockable parameter: locks on latched steps, otherwise the sound itself.
     void setParam(int t,int id,double v,bool allowLocks=true){
         v=std::clamp(v,0.,1.);lastParam=id;lastTrack=t;
-        if(allowLocks&&t==ui.selectedTrack&&!ui.latched.empty()){
+        if(allowLocks&&editScene>=0){
+            if(engine.trigSetSceneValue(editScene,t,id,v))status("SCÈNE "+std::to_string(editScene+1)+" : T"+std::to_string(t+1)+" "+trigParamName(id,&snap->edits[t])+" = "+trigParamDisplay(id,v));
+            else status("La scène est pleine (64 valeurs).");
+        }else if(allowLocks&&t==ui.selectedTrack&&!ui.latched.empty()){
             if(id>=TrigFxFirst&&id<TrigCcFirst){const int slot=(id-TrigFxFirst)/6;if(snap->edits[t].inserts[size_t(slot)].bypass)engine.setInsertBypass(t,slot,false);}
             bool full=false;for(int s:ui.latched)if(!engine.trigSetLock(t,s,id,v))full=true;
             status(full?"Un pas a déjà 8 locks : supprime-en un avant d'en ajouter.":"LOCK "+trigParamName(id,&snap->edits[t])+" = "+trigParamDisplay(id,v)+" sur "+std::to_string(ui.latched.size())+" pas.");
@@ -147,8 +189,8 @@ struct TrigUI::Impl {
     void setField(Field f,int value){
         int minimum=0;const int maximum=fieldRange(f,minimum);value=std::clamp(value,minimum,maximum);const int t=ui.selectedTrack;
         if(!ui.latched.empty()){
-            for(int s:ui.latched){TrigStep st=current().steps[size_t(s)];if(!st.trig)continue;
-                switch(f){case Field::Note:st.note=int8_t(value);break;case Field::Velocity:st.velocity=uint8_t(value);break;case Field::Length:st.length=uint8_t(value);break;case Field::Probability:st.probability=uint8_t(value);break;case Field::Condition:st.condition=uint8_t(value);break;case Field::Micro:st.micro=int8_t(value);break;case Field::Retrig:st.retrig=uint8_t(value);break;default:break;}
+            for(int s:ui.latched){TrigStep st=current().steps[size_t(s)];if(!st.trig&&f!=Field::Slide)continue;
+                switch(f){case Field::Slide:st.slide=value!=0;break;case Field::Note:st.note=int8_t(value);break;case Field::Velocity:st.velocity=uint8_t(value);break;case Field::Length:st.length=uint8_t(value);break;case Field::Probability:st.probability=uint8_t(value);break;case Field::Condition:st.condition=uint8_t(value);break;case Field::Micro:st.micro=int8_t(value);break;case Field::Retrig:st.retrig=uint8_t(value);break;default:break;}
                 engine.trigSetStep(t,s,st);}
         }else{
             TrigTrack config=current();
@@ -180,12 +222,13 @@ struct TrigUI::Impl {
     void saveSettings(){
         std::ofstream f(settingsPath().u8string(),std::ios::trunc);if(!f)return;f<<"TRIGSETTINGS 1\n";
         for(const auto& m:macros)f<<"M "<<m.track<<' '<<m.param<<' '<<m.value<<' '<<m.midiChannel<<' '<<m.midiCc<<'\n';
-        f<<"FOLLOW "<<follow<<'\n';
+        f<<"FOLLOW "<<follow<<'\n';f<<"FADER "<<faderChannel<<' '<<faderCc<<'\n';
     }
     void loadSettings(){
         std::ifstream f(settingsPath().u8string());std::string tag;int version=0;if(!f||!(f>>tag>>version)||tag!="TRIGSETTINGS")return;
         for(auto& m:macros){Macro parsed;if(!(f>>tag>>parsed.track>>parsed.param>>parsed.value>>parsed.midiChannel>>parsed.midiCc)||tag!="M")return;if(parsed.track>=TrigTracks||parsed.param>=TrigParamCount)parsed=Macro{};m=parsed;}
         int value=1;if(f>>tag>>value&&tag=="FOLLOW")follow=value!=0;
+        int channel=-1,cc=-1;if(f>>tag>>channel>>cc&&tag=="FADER"){faderChannel=channel;faderCc=std::clamp(cc,-1,127);}
     }
 
     // ----- project -----
@@ -343,17 +386,58 @@ struct TrigUI::Impl {
     void drawKnob(Painter& p,const Rect& r,const Knob& k,bool hot){
         p.round(r.x,r.y,r.w,r.h,10,hot?Panel2:Panel);
         if(!k.kind){p.roundFrame(r.x,r.y,r.w,r.h,10,Panel2);return;}
-        p.roundFrame(r.x,r.y,r.w,r.h,10,k.locked?Red:Line,k.locked?2:1);
-        p.text(r.x+6,r.y+10,r.w-12,20,k.label,13,k.enabled?(k.locked?Red:Muted):Dim,Align::Center,true);
+        const Color mark=k.scene?Green:Red;const bool marked=k.locked||k.scene;
+        p.roundFrame(r.x,r.y,r.w,r.h,10,marked?mark:Line,marked?2:1);
+        p.text(r.x+6,r.y+10,r.w-12,20,k.label,13,k.enabled?(marked?mark:Muted):Dim,Align::Center,true);
         const bool large=r.h>180;const int cx=r.x+r.w/2,cy=r.y+(large?92:70),radius=large?42:32;
         p.arc(cx,cy,radius,135,270,Line,8);
-        if(k.enabled){const Color c=k.locked?Red:(ui.page==0?Yellow:Blue);p.arc(cx,cy,radius,135,std::max(1.,270*k.value),c,8);
+        if(k.enabled){const Color c=marked?mark:(ui.page==0?Yellow:Blue);p.arc(cx,cy,radius,135,std::max(1.,270*k.value),c,8);
             const double angle=(135+270*k.value)*3.14159265/180.;p.line(cx,cy,cx+int(std::cos(angle)*(radius-14)),cy+int(std::sin(angle)*(radius-14)),Ink,3);}
         p.disc(cx,cy,7,k.enabled?Ink:Dim);
         p.text(r.x+4,r.y+r.h-(large?50:44),r.w-8,24,k.display,large?16:14,k.enabled?Ink:Dim,Align::Center,true);
         if(k.locked)p.text(r.x+4,r.y+r.h-26,r.w-8,18,"LOCK · clic droit = retirer",10,Red,Align::Center);
+        else if(k.scene)p.text(r.x+4,r.y+r.h-26,r.w-8,18,"SCÈNE · clic droit = retirer",10,Green,Align::Center);
         else if(k.ccSlot>=0&&large)p.text(r.x+4,r.y+r.h-26,r.w-8,18,"molette sur le titre = n° CC",10,Dim,Align::Center);
     }
+    void paintScenes(Painter& p){
+        const auto& pat=pattern();
+        p.text(MainX+262,MacroY,946,28,editScene>=0?"SCÈNE "+std::to_string(editScene+1)+" EN ÉDITION : les potards de toutes les pistes écrivent dans la scène":"clic = éditer une scène · clic droit = A / B, copier, effacer · le crossfader passe de A à B",11,editScene>=0?Green:Muted,Align::Left,editScene>=0);
+        for(int i=0;i<TrigScenes;++i){
+            const auto r=sceneRect(i);const bool editing=editScene==i;const auto& sc=pat.scenes[size_t(i)];
+            button(p,r,std::to_string(i+1),editing,Green,15);
+            if(sc.count)p.text(r.x+4,r.y+r.h-15,r.w-8,13,std::to_string(sc.count)+" val.",9,editing?Bg:Muted,Align::Center);
+            if(pat.sceneA==i){p.round(r.x+3,r.y+3,16,16,4,Blue);p.text(r.x+3,r.y+3,16,16,"A",10,Bg,Align::Center,true);}
+            if(pat.sceneB==i){p.round(r.x+r.w-19,r.y+3,16,16,4,Yellow);p.text(r.x+r.w-19,r.y+3,16,16,"B",10,Bg,Align::Center,true);}
+        }
+        const auto& f=Crossfader;const double x=std::clamp(snap->crossfader,0.,1.);
+        p.text(MainX,f.y,84,f.h,"A · "+std::to_string(pat.sceneA+1),15,Blue,Align::Left,true);
+        p.text(f.x+f.w+6,f.y,84,f.h,std::to_string(pat.sceneB+1)+" · B",15,Yellow,Align::Right,true);
+        p.round(f.x,f.y+16,f.w,8,4,Line);if(x>0)p.round(f.x,f.y+16,std::max(8,int(f.w*x)),8,4,mix(Blue,Yellow,x));
+        const int hx=f.x+int(f.w*x);p.round(hx-14,f.y,28,f.h,6,Ink);p.fill(hx-1,f.y+8,2,f.h-16,Bg);
+        std::string info="CROSSFADER "+std::to_string(int(std::lround(x*100)))+" %";if(faderCc>=0)info+=" · CC "+std::to_string(faderCc);if(learnFader)info+=" · LEARN : tourne un potard";
+        p.text(MainX,f.y+f.h+6,MainW,20,info+" · glisser ou molette · clic droit = MIDI Learn",11,Muted,Align::Center);
+    }
+    void sceneMenu(int index){
+        const auto& pat=pattern();const bool has=pat.scenes[size_t(index)].count>0;
+        const int choice=host.popup({{"Mettre en A (crossfader à gauche)",pat.sceneA==index},{"Mettre en B (crossfader à droite)",pat.sceneB==index},{"",false,true,true},{"Copier la scène",false,has},{"Coller dans la scène "+std::to_string(index+1),false,sceneClipboard!=nullptr},{"Effacer la scène",false,has}});
+        if(choice==0)engine.trigSetSceneAB(index,pat.sceneB);else if(choice==1)engine.trigSetSceneAB(pat.sceneA,index);
+        else if(choice==3)sceneClipboard=std::make_unique<TrigScene>(pat.scenes[size_t(index)]);
+        else if(choice==4&&sceneClipboard){engine.trigClearScene(index);for(int i=0;i<sceneClipboard->count;++i){const auto& l=sceneClipboard->locks[size_t(i)];engine.trigSetSceneValue(index,l.track,l.param,l.value/double(TrigLockResolution));}}
+        else if(choice==5)engine.trigClearScene(index);
+        if(choice>=0&&choice!=3)changed();refresh();
+    }
+    void copySteps(){
+        stepClipboard.clear();if(ui.latched.empty())return;auto sorted=ui.latched;std::sort(sorted.begin(),sorted.end());
+        for(int s:sorted)stepClipboard.emplace_back(s-sorted.front(),current().steps[size_t(s)]);status(std::to_string(stepClipboard.size())+" pas copiés (avec leurs locks).");
+    }
+    void pasteSteps(){
+        if(stepClipboard.empty()||ui.latched.empty())return;const int start=*std::min_element(ui.latched.begin(),ui.latched.end());int pasted=0;
+        for(const auto& entry:stepClipboard){const int at=start+entry.first;if(at>=current().length)break;engine.trigSetStep(ui.selectedTrack,at,entry.second);++pasted;}
+        changed();refresh();status(std::to_string(pasted)+" pas collés à partir du pas "+std::to_string(start+1)+".");
+    }
+    void copyPage(){pageClipboard=std::make_unique<std::array<TrigStep,16>>();for(int i=0;i<16;++i)(*pageClipboard)[size_t(i)]=current().steps[size_t(ui.stepPage*16+i)];status("Page "+std::to_string(ui.stepPage+1)+" copiée.");}
+    void pastePage(){if(!pageClipboard)return;for(int i=0;i<16;++i){const int at=ui.stepPage*16+i;if(at>=current().length)break;engine.trigSetStep(ui.selectedTrack,at,(*pageClipboard)[size_t(i)]);}changed();refresh();status("Page collée sur les pas "+std::to_string(ui.stepPage*16+1)+"–"+std::to_string(ui.stepPage*16+16)+".");}
+    void setFader(double v){engine.setCrossfader(v);refresh();}
     void paint(Painter& p){
         refresh();const auto& pat=pattern();const auto& seq=snap->sequences[snap->sequence];const int sel=ui.selectedTrack;const auto& tr=current();
         p.fill(0,0,DesignWidth,DesignHeight,Bg);
@@ -409,7 +493,8 @@ struct TrigUI::Impl {
         const int playStep=snap->trigPlayStep[sel];
         for(int page=0;page<4;++page){const auto r=stepPageRect(page);const bool usable=page<pages();button(p,r,std::to_string(page*16+1)+"–"+std::to_string(page*16+16),ui.stepPage==page,Blue,12,usable);if(playStep>=0&&playStep/16==page)p.fill(r.x+8,r.y+r.h-4,r.w-16,3,Green);}
         button(p,FollowRect,"SUIVRE",follow,Green,12);
-        p.text(MainX+508,PagesY,700,30,"Clic = trig · Clic droit / Maj+clic = sélectionner pour lock · Glisser = peindre",11,Muted,Align::Left);
+        button(p,PageCopy,"COPIER PAGE",false,Blue,11);button(p,PagePaste,"COLLER PAGE",false,Blue,11,pageClipboard!=nullptr);
+        p.text(MainX+762,PagesY,446,30,"Clic = trig · Clic droit = sélection pour lock · Ctrl+Z annuler",11,Muted,Align::Left);
         // Steps
         const Color trigColor=isMidi(sel)?Yellow:Blue;
         for(int i=0;i<16;++i){
@@ -423,10 +508,10 @@ struct TrigUI::Impl {
             p.roundFrame(r.x,r.y,r.w,r.h,9,latched?White:(i%4==0?Dim:Line),latched?3:1);
             const Color label=st.trig?Bg:Muted;
             p.text(r.x+8,r.y+6,40,18,std::to_string(step+1),12,label,Align::Left,true);
-            if(st.lockCount>0)p.disc(r.x+r.w-13,r.y+13,6,Red);
+            if(st.lockCount>0){p.disc(r.x+r.w-14,r.y+14,9,Red);p.text(r.x+r.w-23,r.y+5,18,18,std::to_string(st.lockCount),10,White,Align::Center,true);}
             std::string info;if(st.trig){if(st.condition!=TrigCondNone)info=trigConditionName(st.condition);else if(st.probability<100)info=std::to_string(st.probability)+"%";}
             if(!info.empty())p.text(r.x+4,r.y+r.h-28,r.w-8,20,info,13,label,Align::Center,true);
-            std::string flags;if(st.trig&&st.retrig>1)flags+="x"+std::to_string(st.retrig);if(st.trig&&isMidi(sel)&&st.note>=0){if(!flags.empty())flags+=" ";flags+=noteName(st.note);}
+            std::string flags;if(st.slide)flags+="SLIDE ";if(st.trig&&st.retrig>1)flags+="x"+std::to_string(st.retrig);if(st.trig&&isMidi(sel)&&st.note>=0){if(!flags.empty())flags+=" ";flags+=noteName(st.note);}
             if(!flags.empty())p.text(r.x+4,r.y+30,r.w-8,18,flags,11,label,Align::Center,true);
             if(st.micro!=0){const int x=r.x+r.w/2+st.micro*(r.w/2-6)/23;p.fill(x-1,r.y+r.h-6,3,5,st.trig?Bg:Orange);}
             if(head)p.fill(r.x,r.y+r.h+5,r.w,5,Green);
@@ -436,7 +521,8 @@ struct TrigUI::Impl {
         else{
             int locks=0;for(int s:ui.latched)locks+=tr.steps[size_t(s)].lockCount;
             std::string list;for(size_t i=0;i<ui.latched.size()&&i<8;++i){if(i)list+=", ";list+=std::to_string(ui.latched[i]+1);}if(ui.latched.size()>8)list+="…";
-            p.text(LatchInfo.x,LatchInfo.y,LatchInfo.w+170,LatchInfo.h,"SÉLECTION : pas "+list+" · "+std::to_string(locks)+" lock(s) — les potards écrivent des LOCKS",13,Red,Align::Left,true);
+            p.text(LatchInfo.x,LatchInfo.y,LatchInfo.w,LatchInfo.h,editScene>=0?"Pas "+list+" sélectionnés — les potards écrivent dans la SCÈNE "+std::to_string(editScene+1):"SÉLECTION : pas "+list+" · "+std::to_string(locks)+" lock(s) → potards = LOCKS",13,editScene>=0?Green:Red,Align::Left,true);
+            button(p,LatchCopy,"COPIER LES PAS",false,Blue,12);button(p,LatchPaste,"COLLER ICI",false,Blue,12,!stepClipboard.empty());
             button(p,LatchClear,"EFFACER LOCKS",false,Red,12);button(p,LatchRelease,"RELÂCHER (Échap)",false,Blue,12);
         }
         // Tabs
@@ -450,15 +536,18 @@ struct TrigUI::Impl {
         const auto list=knobs();for(int i=0;i<8;++i)drawKnob(p,knobRect(i),list[size_t(i)],dragKnob==i||knobRect(i).in(mouseX,mouseY));
         if(ui.page==0&&ui.latched.empty())p.text(MainX,KnobY+KnobH+2,MainW,16,"Sans sélection : NOTE, VÉLOCITÉ et LONGUEUR sont les valeurs des nouveaux trigs de la piste. Sélectionne un pas pour régler sa probabilité, sa condition, son micro-timing et son retrig.",10,Muted,Align::Left);
         else if(ui.page==0)p.text(MainX,KnobY+KnobH+2,MainW,16,"CONDITION : 1:4 = joue au 1er passage sur 4 · FILL = seulement avec FILL · PRE/NEI = selon le trig précédent / la piste voisine · 1ST = premier passage",10,Muted,Align::Left);
-        // Macros
-        p.text(MainX,MacroY,400,28,"MACROS M1–M8",15,Ink,Align::Left,true);
-        p.text(MainX+170,MacroY,1000,28,"touche un potard puis clic droit sur une macro pour l'assigner · MIDI Learn pour ton LPD8 / MPK",11,Muted,Align::Left);
+        // Macros / scenes
+        button(p,ViewMacros,"MACROS",!sceneView,Blue,12);button(p,ViewScenes,"SCÈNES",sceneView,Green,12);
+        if(sceneView)paintScenes(p);
+        else{
+        p.text(MainX+262,MacroY,946,28,"touche un potard puis clic droit sur une macro pour l'assigner · MIDI Learn pour ton LPD8 / MPK",11,Muted,Align::Left);
         for(int i=0;i<8;++i){
             const auto r=macroRect(i);const auto& m=macros[size_t(i)];Knob k;k.kind=1;k.enabled=m.track>=0;k.value=m.value;
             k.label="M"+std::to_string(i+1)+(m.track>=0?" · T"+std::to_string(m.track+1)+" "+trigParamName(m.param,&snap->edits[size_t(m.track)]):"");
             k.display=m.track>=0?trigParamDisplay(m.param,m.value):"non assignée";if(learnMacro==i){k.display="LEARN…";}
             if(m.midiCc>=0)k.label+=" ·CC"+std::to_string(m.midiCc);
             Rect small{r.x,r.y,r.w,r.h};drawKnob(p,small,k,dragMacro==i);
+        }
         }
         // Status bar
         p.fill(0,DesignHeight-30,DesignWidth,30,Panel);p.line(0,DesignHeight-30,DesignWidth,DesignHeight-30,Line);
@@ -475,7 +564,7 @@ struct TrigUI::Impl {
     }
     int stepAt(int x,int y)const{for(int i=0;i<16;++i)if(stepRect(i).in(x,y))return ui.stepPage*16+i;return -1;}
     void mouseDown(int x,int y,int button,int modifiers){
-        refresh();mouseX=x;mouseY=y;const bool right=button==1;const int sel=ui.selectedTrack;
+        refresh();mouseX=x;mouseY=y;const bool right=button==1;const int sel=ui.selectedTrack;gestureOpen=!right;gesturePushed=false;gesture=right?"":"mouse";
         if(!right){
             if(HeaderPlay.in(x,y)){togglePlay();return;}
             if(HeaderStop.in(x,y)){stop();return;}
@@ -512,6 +601,8 @@ struct TrigUI::Impl {
         if(TrackClear.in(x,y)){engine.trigClearTrack(sel);ui.latched.clear();changed();refresh();status("Pas de la piste effacés.");return;}
         for(int page=0;page<4;++page)if(stepPageRect(page).in(x,y)){if(page<pages())ui.stepPage=page;return;}
         if(FollowRect.in(x,y)){follow=!follow;saveSettings();return;}
+        if(PageCopy.in(x,y)){copyPage();return;}
+        if(PagePaste.in(x,y)){pastePage();return;}
         const int step=stepAt(x,y);
         if(step>=0){
             if(step>=current().length)return;
@@ -521,18 +612,29 @@ struct TrigUI::Impl {
             changed();refresh();return;
         }
         if(!ui.latched.empty()&&LatchClear.in(x,y)){clearLatchedLocks();return;}
+        if(!ui.latched.empty()&&LatchCopy.in(x,y)){copySteps();return;}
+        if(!ui.latched.empty()&&LatchPaste.in(x,y)){pasteSteps();return;}
         if(!ui.latched.empty()&&LatchRelease.in(x,y)){ui.latched.clear();status("Sélection relâchée.");return;}
         const int tab=tabAt(x,y);if(tab>=0){ui.page=tab;return;}
         if(!isMidi(sel)&&ui.page>=3){const int slot=ui.page-3;if(FxBypass.in(x,y)){engine.setInsertBypass(sel,slot,!snap->edits[sel].inserts[size_t(slot)].bypass);changed();refresh();return;}if(FxEffect.in(x,y)||(y>=TabY&&y<TabY+TabH&&x>FxEffect.x-200&&x<FxBypass.x)){effectMenu(slot);return;}}
         for(int i=0;i<8;++i){
             const auto r=knobRect(i);if(!r.in(x,y))continue;const auto list=knobs();const auto& k=list[size_t(i)];if(!k.kind||!k.enabled)return;
             if(right){
-                if(k.locked){for(int s:ui.latched)engine.trigClearLock(sel,s,k.id);changed();refresh();status("Lock retiré.");}
+                if(k.scene){engine.trigClearSceneValue(editScene,sel,k.id);changed();refresh();status("Valeur retirée de la scène.");}
+                else if(k.locked){for(int s:ui.latched)engine.trigClearLock(sel,s,k.id);changed();refresh();status("Lock retiré.");}
                 else if(k.ccSlot>=0&&ui.latched.empty()){engine.trigSetCcBase(sel,k.ccSlot,-1);changed();refresh();status("Ce CC n'est plus envoyé.");}
                 else if(k.kind==1){lastParam=k.id;lastTrack=sel;status("Potard mémorisé : clic droit sur une macro pour l'y assigner.");}
                 return;
             }
             dragKnob=i;dragStart=k.value;dragStartY=y;if(k.kind==1){lastParam=k.id;lastTrack=sel;}return;
+        }
+        if(ViewMacros.in(x,y)){sceneView=false;return;}
+        if(ViewScenes.in(x,y)){sceneView=true;return;}
+        if(sceneView){
+            for(int i=0;i<TrigScenes;++i)if(sceneRect(i).in(x,y)){if(right)sceneMenu(i);else{editScene=editScene==i?-1:i;status(editScene>=0?"Scène "+std::to_string(i+1)+" en édition : tourne les potards de n'importe quelle piste.":"Édition de scène terminée.");}return;}
+            const Rect grab{Crossfader.x-20,Crossfader.y,Crossfader.w+40,Crossfader.h};
+            if(grab.in(x,y)){if(right){learnFader=true;status("MIDI Learn du crossfader : tourne un potard de ton contrôleur.");}else{dragFader=true;setFader(double(x-Crossfader.x)/Crossfader.w);}return;}
+            return;
         }
         for(int i=0;i<8;++i){const auto r=macroRect(i);if(!r.in(x,y))continue;if(right)macroMenu(i);else{dragMacro=i;dragStart=macros[size_t(i)].value;dragStartY=y;}return;}
         if(!right&&modifiers==0&&!ui.latched.empty()&&y>StepY+StepH&&y<TabY){ui.latched.clear();status("Sélection relâchée.");}
@@ -541,15 +643,17 @@ struct TrigUI::Impl {
         mouseX=x;mouseY=y;const int dy=dragStartY-y;const bool fine=(modifiers&ModShift)!=0;
         if(dragKnob>=0){knobAbsolute(dragKnob,dragStart,dy,fine);return;}
         if(dragMacro>=0){setMacro(dragMacro,dragStart+dy/(fine?800.:200.));return;}
+        if(dragFader){setFader(double(x-Crossfader.x)/Crossfader.w);return;}
         if(dragHeader==0){engine.setTempo(std::round((dragStart+dy*(fine?.05:.5))*10)/10);changed();return;}
         if(dragHeader==1){engine.trigSetSwing(int(std::lround(dragStart+dy/6.)));changed();return;}
         if(dragHeader==2){engine.trigSetMasterLength(int(std::lround(dragStart+dy/5.)));changed();return;}
         if(dragHeader==3){refresh();setTrackLength(int(std::lround(dragStart+dy/5.)));return;}
         if(paintStep>=0){const int step=stepAt(x,y);if(step>=0&&step!=paintStep&&step<current().length){refresh();if(current().steps[size_t(step)].trig!=paintValue){engine.trigToggle(ui.selectedTrack,step);changed();}paintStep=step;}}
     }
-    void mouseUp(){if(fillMouse){fillMouse=false;engine.setFill(fillKey);}const bool macro=dragMacro>=0;dragKnob=dragMacro=dragHeader=paintStep=-1;if(macro)saveSettings();}
+    void mouseUp(){if(fillMouse){fillMouse=false;engine.setFill(fillKey);}const bool macro=dragMacro>=0;dragKnob=dragMacro=dragHeader=paintStep=-1;dragFader=false;gestureOpen=false;gesture.clear();if(macro)saveSettings();}
     void wheel(int x,int y,int delta,int modifiers){
-        refresh();const bool fine=(modifiers&ModShift)!=0;
+        refresh();gestureOpen=false;const bool fine=(modifiers&ModShift)!=0;gesture="wheel "+std::to_string(x/40)+","+std::to_string(y/40);
+        if(sceneView&&Rect{Crossfader.x-20,Crossfader.y,Crossfader.w+40,Crossfader.h}.in(x,y)){setFader(snap->crossfader+delta*(fine?.01:.05));return;}
         if(HeaderTempo.in(x,y)){engine.setTempo(snap->tempo+delta*(fine?.1:1.));changed();return;}
         if(HeaderSwing.in(x,y)){engine.trigSetSwing(pattern().swing+delta);changed();return;}
         if(HeaderMaster.in(x,y)){engine.trigSetMasterLength(pattern().masterLength+delta);changed();return;}
@@ -564,20 +668,22 @@ struct TrigUI::Impl {
         if(x<MainX&&y>=TrackY)selectTrack(ui.selectedTrack-delta);
     }
     void key(int code,bool down,int modifiers){
-        refresh();
+        refresh();gestureOpen=false;gesture.clear();
         if(code=='F'){fillKey=down;engine.setFill(down||fillMouse);return;}
         if(!down)return;
         if(modifiers&ModControl){
             if(code=='S'){saveProject((modifiers&ModShift)!=0);return;}
             if(code=='O'){openProject("project");return;}
             if(code=='N'){newProject();return;}
-            if(code=='C'){trackClipboard=std::make_unique<TrigTrack>(current());status("Piste copiée.");return;}
-            if(code=='V'&&trackClipboard){engine.trigSetTrack(ui.selectedTrack,*trackClipboard);changed();status("Piste collée.");return;}
+            if(code=='Z'){undo((modifiers&ModShift)!=0);return;}
+            if(code=='Y'){undo(true);return;}
+            if(code=='C'){if(!ui.latched.empty())copySteps();else{trackClipboard=std::make_unique<TrigTrack>(current());status("Piste copiée.");}return;}
+            if(code=='V'){if(!ui.latched.empty()&&!stepClipboard.empty())pasteSteps();else if(trackClipboard){engine.trigSetTrack(ui.selectedTrack,*trackClipboard);changed();status("Piste collée.");}return;}
             return;
         }
         switch(code){
         case KeySpace:togglePlay();break;
-        case KeyEscape:ui.latched.clear();status("Sélection relâchée.");break;
+        case KeyEscape:ui.latched.clear();if(editScene>=0){editScene=-1;status("Édition de scène terminée.");}else status("Sélection relâchée.");break;
         case KeyDelete:case KeyBack:clearLatchedLocks();break;
         case KeyLeft:ui.stepPage=std::max(0,ui.stepPage-1);break;
         case KeyRight:ui.stepPage=std::min(pages()-1,ui.stepPage+1);break;
@@ -590,6 +696,8 @@ struct TrigUI::Impl {
     void midiIn(unsigned packed){
         const int statusByte=packed&255,type=statusByte&0xF0,channel=statusByte&15,data1=(packed>>8)&127,data2=(packed>>16)&127;
         if(type==0xB0){
+            if(learnFader){faderChannel=channel;faderCc=data1;learnFader=false;saveSettings();status("Crossfader appris sur CC "+std::to_string(data1)+".");return;}
+            if(faderCc==data1&&faderChannel==channel){setFader(data2/127.);return;}
             if(learnMacro>=0){auto& m=macros[size_t(learnMacro)];m.midiChannel=channel;m.midiCc=data1;status("M"+std::to_string(learnMacro+1)+" apprise sur CC "+std::to_string(data1)+".");learnMacro=-1;saveSettings();return;}
             for(int i=0;i<8;++i)if(macros[size_t(i)].midiCc==data1&&macros[size_t(i)].midiChannel==channel){refresh();setMacro(i,data2/127.);}
             return;
