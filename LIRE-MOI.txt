@@ -1,0 +1,26 @@
+ELEKTAKT — séquenceur à la Elektron · ANKS Labs
+============================================
+
+DÉMARRER
+1. Extrais tout le dossier ZIP (clic droit > Extraire tout), pas seulement ELEKTAKT.exe.
+2. Lance ELEKTAKT.exe. Un pattern de démonstration est chargé : appuie sur ESPACE.
+3. Clic sur un pas = poser / retirer un trig.
+4. Clic droit sur un pas = le sélectionner, puis tourne un potard = PARAMETER LOCK.
+   Un pas vide sélectionné qui reçoit un lock devient un TRIGLESS LOCK (cadre rouge).
+5. Page TRIG : probabilité, CONDITION (1:4, FILL, PRE, NEI, 1ST…), micro-timing, retrig.
+6. Chaque piste a sa propre LONGUEUR (1 à 64 pas) et sa VITESSE (2x à 1/8x).
+7. Glisse un fichier WAV sur une piste pour charger ton propre son.
+
+ENVOYER LE MIDI VERS ABLETON (pistes MIDI + horloge)
+1. Installe loopMIDI (gratuit) : https://www.tobias-erichsen.de/software/loopmidi.html
+   et crée un port (bouton +).
+2. Dans ELEKTAKT : SORTIE MIDI > choisis le port loopMIDI.
+   Passe une piste en MIDI (bouton SON | MIDI) et choisis son canal.
+3. Dans Ableton : Préférences > Link, Tempo & MIDI > entrée loopMIDI :
+   « Piste » (Track) = On pour recevoir les notes, « Sync » = On pour suivre le tempo.
+   Arme une piste MIDI d'Ableton et règle son entrée sur loopMIDI, canal choisi.
+
+RACCOURCIS
+Espace = lecture/stop · F (maintenu) = FILL · Échap = relâcher la sélection
+Suppr = effacer les locks des pas sélectionnés · ←/→ pages de pas · ↑/↓ pistes
+Ctrl+S enregistrer · Ctrl+O ouvrir · Ctrl+N nouveau · Ctrl+C / Ctrl+V copier/coller la piste

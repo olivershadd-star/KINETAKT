@@ -1,0 +1,23 @@
+ELEKTAKT — ANKS Labs
+Séquenceur à la Elektron, libre et gratuit, sous licence AGPL-3.0-or-later.
+
+ELEKTAKT est construit sur le moteur du projet KICK d'ANKS Labs, lui-même basé sur
+le code ouvert publié par Music Tribe :
+  AudIO et KICK : Copyright (c) MUSIC Tribe, AGPL-3.0-or-later.
+  https://github.com/MusicTribeOpenSource/0700-AAM
+  Le sous-ensemble utilisé se trouve dans vendor/AudIO. Texte de l'AGPL : LICENSE.
+
+Effets Airwindows : Copyright Chris Johnson / Airwindows, licence MIT.
+  Sources dans vendor/AudIO/airwindows/src, licence : vendor/AudIO/airwindows/LICENSE.
+
+AudioFile : Copyright (c) 2017 Adam Stark, licence MIT (en-tête de
+  vendor/AudIO/3rdparty/AudioFile.h).
+
+Kit de démonstration : sons synthétisés par tools/make_kit.py, CC0-1.0.
+
+Séquenceur ELEKTAKT, interface Windows, tests : ANKS Labs, AGPL-3.0-or-later.
+
+Le séquenceur s'inspire de l'ergonomie des machines Elektron (parameter locks,
+trig conditions). Elektron, Digitakt, Behringer, Music Tribe, KICK, Ableton,
+Native Instruments et Maschine sont des marques de leurs propriétaires.
+ELEKTAKT est un projet indépendant, ni affilié ni approuvé par ces fabricants.

@@ -1,0 +1,60 @@
+name: ELEKTAKT Windows build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure x64
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
+
+      - name: Test sequencer engine
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Smoke-test Windows interface
+        shell: pwsh
+        run: |
+          $process = Start-Process build/Release/ELEKTAKT.exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw "ELEKTAKT did not close by itself" }
+          if ($process.ExitCode -ne 0) { throw "ELEKTAKT exited with $($process.ExitCode)" }
+
+      - name: Assemble portable ZIP
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          $folder = "dist/ELEKTAKT-Windows-x64-$version"
+          New-Item -ItemType Directory -Force "$folder/demo-kit","$folder/samples","$folder/projets" | Out-Null
+          Copy-Item build/Release/ELEKTAKT.exe "$folder/"
+          Copy-Item demo-kit/*.wav "$folder/demo-kit/"
+          Copy-Item LIRE-MOI.txt,README.md,NOTICES.txt,LICENSE "$folder/"
+          Compress-Archive -Path $folder -DestinationPath "dist/ELEKTAKT-Windows-x64-$version.zip" -Force
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ELEKTAKT ${{ github.ref_name }} — Windows x64
+          prerelease: true
+          files: dist/*.zip
+          body: |
+            **ELEKTAKT — séquenceur à la Elektron, ANKS Labs.**
+
+            Télécharge le fichier `ELEKTAKT-Windows-x64-….zip` ci-dessous, extrais-le entièrement et lance `ELEKTAKT.exe`.
+            Aucune installation. Pour envoyer le MIDI vers Ableton, installe loopMIDI (gratuit) — voir le README.
+
+            Download the `ELEKTAKT-Windows-x64-….zip` file below, extract it and run `ELEKTAKT.exe`. No installation needed.
