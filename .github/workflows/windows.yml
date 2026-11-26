@@ -1,11 +1,11 @@
 name: ELEKTAKT Windows build
 
+# Every push to main is compiled and tested on Windows. When the version in
+# CMakeLists.txt has no release yet, the portable ZIP is published as a new
+# numbered release automatically.
 on:
   push:
     branches: [main]
-    tags: ['v*']
-  release:
-    types: [published]
   pull_request:
   workflow_dispatch:
 
@@ -17,6 +17,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $match = Select-String -Path CMakeLists.txt -Pattern 'project\(ELEKTAKT VERSION ([0-9.]+)'
+          $version = $match.Matches[0].Groups[1].Value
+          $exists = git tag --list "v$version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "publish=$(if ($exists -or '${{ github.event_name }}' -eq 'pull_request') { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $version — publish: $(-not $exists)"
 
       - name: Configure x64
         run: cmake -S . -B build -A x64
@@ -35,10 +48,10 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "ELEKTAKT exited with $($process.ExitCode)" }
 
       - name: Assemble portable ZIP
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.version.outputs.publish == 'true'
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
+          $version = "${{ steps.version.outputs.version }}"
           $folder = "dist/ELEKTAKT-Windows-x64-$version"
           New-Item -ItemType Directory -Force "$folder/demo-kit","$folder/samples","$folder/projets" | Out-Null
           Copy-Item build/Release/ELEKTAKT.exe "$folder/"
@@ -47,16 +60,18 @@ jobs:
           Compress-Archive -Path $folder -DestinationPath "dist/ELEKTAKT-Windows-x64-$version.zip" -Force
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.version.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: ELEKTAKT ${{ github.ref_name }} — Windows x64
+          tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: ELEKTAKT ${{ steps.version.outputs.version }} — Windows x64
           prerelease: true
           files: dist/*.zip
           body: |
             **ELEKTAKT — séquenceur à la Elektron, ANKS Labs.**
 
-            Télécharge le fichier `ELEKTAKT-Windows-x64-….zip` ci-dessous, extrais-le entièrement et lance `ELEKTAKT.exe`.
+            Télécharge `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous, extrais-le entièrement et lance `ELEKTAKT.exe`.
             Aucune installation. Pour envoyer le MIDI vers Ableton, installe loopMIDI (gratuit) — voir le README.
 
-            Download the `ELEKTAKT-Windows-x64-….zip` file below, extract it and run `ELEKTAKT.exe`. No installation needed.
+            Download `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` below, extract it and run `ELEKTAKT.exe`. No installation needed.
