@@ -604,6 +604,25 @@ int main(int argc, char** argv) {
               "shared FX restored");
         check(trigIsCc(TrigCcFirst + 7) && !trigIsCc(TrigSendReverb) && trigParamName(TrigSendDelay) == "ENVOI DELAY", "param ranges");
     }
+    // 21. v0.8 — DECAY shortens the sound even with SUSTAIN at 100 % (one-shot decay).
+    {
+        auto energy = [&](double decay) {
+            Rig r;
+            std::string error;
+            check(r.engine->load(0, sample, error), "decay sample");
+            PadEdit edit = grab(*r.engine)->edits[0];
+            edit.decay = decay;
+            r.engine->setEdit(0, edit);
+            r.engine->trigToggle(0, 0);
+            r.engine->setPlaying(true);
+            r.run(int(sf / Block));
+            double e = 0;
+            for (float v : r.audio) e += v;
+            return e;
+        };
+        const double full = energy(0), shortened = energy(.1);
+        check(shortened < full * .5, "decay at sustain 100 %: " + std::to_string(shortened) + " < " + std::to_string(full));
+    }
     // 20. v0.7 — light snapshot keeps the selected pattern and the used-pattern flags.
     {
         Rig r;

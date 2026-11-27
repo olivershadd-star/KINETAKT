@@ -135,8 +135,11 @@ std::string trigParamDisplay(int param, double v) {
     case TrigStart:
     case TrigEnd:
     case TrigSustain: std::snprintf(text, sizeof(text), "%.0f %%", v * 100.); return text;
-    case TrigAttack:
-    case TrigDecay: std::snprintf(text, sizeof(text), "%.0f ms", v * v * 2000.); return text;
+    case TrigAttack: std::snprintf(text, sizeof(text), "%.0f ms", v * v * 2000.); return text;
+    case TrigDecay:
+        if (v <= 0) return "entier";
+        std::snprintf(text, sizeof(text), "%.0f ms", v * v * 2000.);
+        return text;
     case TrigRelease: std::snprintf(text, sizeof(text), "%.0f ms", v * v * 4000.); return text;
     case TrigLevel: std::snprintf(text, sizeof(text), "%.0f %%", v * 200.); return text;
     case TrigPan: {

@@ -280,12 +280,14 @@ private:
             envelope+=1./(std::max(.0001,edit.attack*edit.attack*2.)*lab::Rate);
             if(envelope>=1.){envelope=1.;envelopeStage=edit.decay<=0?EnvelopeStage::Sustain:EnvelopeStage::Decay;}
         }else if(envelopeStage==EnvelopeStage::Decay){
-            const double target=std::clamp(edit.sustain,0.,1.);
+            // With SUSTAIN at 100 %, DECAY is a one-shot fade to silence (Elektron AMP style); below, classic ADSR.
+            const double target=sustainLevel();
             envelope-=(1.-target)/(std::max(.0001,edit.decay*edit.decay*2.)*lab::Rate);
             if(envelope<=target){envelope=target;envelopeStage=EnvelopeStage::Sustain;}
-        }else if(envelopeStage==EnvelopeStage::Sustain)envelope=std::clamp(edit.sustain,0.,1.);
+        }else if(envelopeStage==EnvelopeStage::Sustain)envelope=edit.decay>0?sustainLevel():std::clamp(edit.sustain,0.,1.);
         else if(envelopeStage==EnvelopeStage::Release){envelope-=releaseStep;if(envelope<=0){envelope=0;envelopeStage=EnvelopeStage::Idle;AudIO::AudioPlayback::stop();}}
     }
+    double sustainLevel()const{const double s=std::clamp(edit.sustain,0.,1.);return s>=.999?0.:s;}
     double gain=1;
     double trackLevel=1,trackPan=0,velocityGain=1;
     double envelope=0,releaseStep=0;

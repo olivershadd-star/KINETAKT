@@ -10,6 +10,7 @@
 #include <initializer_list>
 #include <random>
 #include <chrono>
+#include <functional>
 
 namespace trig {
 namespace {
@@ -86,7 +87,7 @@ Rect knobRect(int i) { return {MainX + i * KnobW, KnobY, KnobW - 6, KnobH}; }
 const Rect FxBypass{MainX + MainW - 104, TabY, 104, TabH};
 constexpr int MacroY = 660, MacroH = 196;
 Rect macroRect(int i) { return {MainX + i * KnobW, MacroY + 34, KnobW - 6, MacroH - 34}; }
-const Rect ViewMacros{MainX, MacroY, 120, 28}, ViewScenes{MainX + 126, MacroY, 120, 28};
+const Rect ViewMacros{MainX, MacroY, 170, 28}, ViewScenes{MainX + 176, MacroY, 250, 28};
 Rect sceneRect(int i) { return {MainX + i * 75, MacroY + 42, 70, 42}; }
 const Rect Crossfader{MainX + 90, MacroY + 104, MainW - 180, 40};
 
@@ -113,7 +114,10 @@ struct TrigUI::Impl {
     std::filesystem::path base, project;
     std::unique_ptr<Snapshot> snap = std::make_unique<Snapshot>();
     bool playing = false, record = false, follow = true, fillKey = false, fillMouse = false;
-    int dragKnob = -1, dragMacro = -1, dragHeader = -1, dragStartY = 0, mouseX = 0, mouseY = 0;
+    int dragKnob = -1, dragMacro = -1, dragHeader = -1, dragStartY = 0, dragStartX = 0, mouseX = 0, mouseY = 0;
+    // v0.8: the last clicked step is edited on the TRIG page (no right-click needed).
+    int focusStep = -1;
+    bool dragMoved = false, lastKnobClean = false;
     double dragStart = 0;
     int paintStep = -1;
     bool paintValue = false;
@@ -311,6 +315,7 @@ struct TrigUI::Impl {
             ui.page = 0;
     }
     void selectTrack(int t) {
+        if (t != ui.selectedTrack) focusStep = -1;
         t = std::clamp(t, 0, TrigTracks - 1);
         const bool wasLfo = ui.page == lfoPage(ui.selectedTrack), wasShared = ui.page == sharedPage(ui.selectedTrack);
         if (t != ui.selectedTrack) ui.latched.clear();
@@ -337,6 +342,16 @@ struct TrigUI::Impl {
         return names;
     }
     const TrigStep* firstLatched() const { return ui.latched.empty() ? nullptr : &current().steps[size_t(ui.latched.front())]; }
+    // Steps edited by the TRIG page: the selection (right-click), otherwise the last clicked step.
+    std::vector<int> fieldTargets() const {
+        if (!ui.latched.empty()) return ui.latched;
+        if (focusStep >= 0 && focusStep < current().length) return {focusStep};
+        return {};
+    }
+    const TrigStep* fieldStep() const {
+        const auto targets = fieldTargets();
+        return targets.empty() ? nullptr : &current().steps[size_t(targets.front())];
+    }
 
     // ----- knobs -----
     std::vector<Knob> knobs() const {
@@ -344,7 +359,9 @@ struct TrigUI::Impl {
         const int t = ui.selectedTrack;
         const auto& tr = current();
         const TrigStep* step = firstLatched();
+        const TrigStep* fieldSt = fieldStep();
         auto field = [&](int slot, Field f, const std::string& label) {
+            const TrigStep* step = fieldSt;
             Knob& k = result[size_t(slot)];
             k.kind = 2;
             k.id = int(f);
@@ -669,10 +686,16 @@ struct TrigUI::Impl {
         const int maximum = fieldRange(f, minimum);
         value = std::clamp(value, minimum, maximum);
         const int t = ui.selectedTrack;
-        if (!ui.latched.empty()) {
-            for (int s : ui.latched) {
+        const auto targets = fieldTargets();
+        if (!targets.empty()) {
+            int placed = 0;
+            for (int s : targets) {
+                if (!current().steps[size_t(s)].trig && f != Field::Slide) {
+                    engine.trigToggle(t, s); // an empty step gets a trig instead of ignoring the knob
+                    refresh();
+                    ++placed;
+                }
                 TrigStep st = current().steps[size_t(s)];
-                if (!st.trig && f != Field::Slide) continue;
                 switch (f) {
                 case Field::Slide: st.slide = value != 0; break;
                 case Field::Note: st.note = int8_t(value); break;
@@ -686,6 +709,7 @@ struct TrigUI::Impl {
                 }
                 engine.trigSetStep(t, s, st);
             }
+            if (placed) status("Trig posé sur " + std::to_string(placed) + " pas vide(s) pour pouvoir le régler.");
         } else {
             TrigTrack config = current();
             if (f == Field::Note)
@@ -707,6 +731,7 @@ struct TrigUI::Impl {
         const auto& k = list[size_t(index)];
         if (!k.enabled || !k.kind) return;
         if (k.kind == 4) return;
+        if (atLimit(k, units)) return;
         if (k.kind == 5) {
             if (k.id == 4)
                 setShared(4, (snap->sendFx.delayDivision + int(units)) / double(DelayDivisions - 1));
@@ -729,12 +754,26 @@ struct TrigUI::Impl {
         } else
             setParam(ui.selectedTrack, k.id, k.value + units / paramResolution(k.id));
     }
+    // Pushing a knob past its end says so in the status bar instead of doing nothing silently.
+    bool atLimit(const Knob& k, double direction) {
+        if (direction > 0 && k.value >= .999) {
+            status(k.label + " est déjà au maximum (" + k.display + ") : tourne dans l'autre sens.");
+            return true;
+        }
+        if (direction < 0 && k.value <= .001) {
+            status(k.label + " est déjà au minimum (" + k.display + ") : tourne dans l'autre sens.");
+            return true;
+        }
+        return false;
+    }
     void knobAbsolute(int index, double start, int pixels, bool fine) {
         const auto list = knobs();
         if (index < 0 || index >= int(list.size())) return;
         const auto& k = list[size_t(index)];
         if (!k.enabled || !k.kind) return;
-        const double v = std::clamp(start + pixels / (fine ? 800. : 200.), 0., 1.);
+        const double raw = start + pixels / (fine ? 800. : 200.);
+        if ((raw > 1 || raw < 0) && atLimit(k, raw > 1 ? 1 : -1)) return;
+        const double v = std::clamp(raw, 0., 1.);
         if (k.kind == 4) return;
         if (k.kind == 5) {
             setShared(k.id, v);
@@ -758,6 +797,20 @@ struct TrigUI::Impl {
             }
             setParam(ui.selectedTrack, k.id, value);
         }
+    }
+    // First launch: the 8 macros already do something on the demo kit.
+    void defaultMacros() {
+        for (const auto& m : macros)
+            if (m.track >= 0) return;
+        const std::pair<int, int> defaults[8] = {{0, TrigPitch},      {0, TrigDecay},          {1, TrigDecay},     {2, TrigDecay},
+                                                 {1, TrigSendReverb}, {12, trigFxParam(0, 0)}, {4, TrigSendDelay}, {12, TrigDecay}};
+        for (int i = 0; i < 8; ++i) {
+            auto& m = macros[size_t(i)];
+            m.track = defaults[i].first;
+            m.param = defaults[i].second;
+            m.value = trigTrackBase(snap->edits[size_t(m.track)], track(m.track), m.param);
+        }
+        saveSettings();
     }
     void setMacro(int index, double value) {
         auto& m = macros[size_t(index)];
@@ -1504,6 +1557,112 @@ struct TrigUI::Impl {
             status("WAV refusé : " + error);
         refresh();
     }
+    // A page beyond the track length: make the track longer (empty, or repeating its steps).
+    void extendMenu(int page) {
+        const int length = current().length, target = (page + 1) * 16;
+        const int choice = host.popup({{"La piste fait " + std::to_string(length) + " pas.", false, false},
+                                       {"Allonger à " + std::to_string(target) + " pas (nouveaux pas vides)"},
+                                       {"Allonger à " + std::to_string(target) + " pas en recopiant les pas existants"}});
+        if (choice < 1) return;
+        const TrigTrack before = current();
+        setTrackLength(target);
+        if (choice == 2)
+            for (int s = length; s < target; ++s) engine.trigSetStep(ui.selectedTrack, s, before.steps[size_t(s % length)]);
+        changed();
+        refresh();
+        ui.stepPage = page;
+        status("Piste allongée à " + std::to_string(target) + " pas.");
+    }
+    void headerMenu(int which) {
+        std::vector<MenuItem> items;
+        std::vector<double> values;
+        if (which == 0) {
+            for (double v :
+                 {70., 80., 90., 95., 100., 110., 115., 120., 122., 124., 126., 128., 130., 135., 140., 150., 160., 170., 174., 180.}) {
+                values.push_back(v);
+                char text[24];
+                std::snprintf(text, sizeof(text), "%.0f BPM", v);
+                items.push_back({text, std::abs(snap->tempo - v) < .05});
+            }
+        } else if (which == 1) {
+            for (int v = 50; v <= 80; v += 2) {
+                values.push_back(v);
+                items.push_back(
+                    {std::to_string(v) + " %" + (v == 50 ? "  (droit)" : (v == 66 ? "  (ternaire)" : "")), pattern().swing == v});
+            }
+        } else if (which == 2) {
+            for (int v : {0, 8, 12, 16, 24, 32, 48, 64}) {
+                values.push_back(v);
+                items.push_back(
+                    {v == 0 ? std::string("INF (chaque piste boucle seule)") : std::to_string(v) + " pas", pattern().masterLength == v});
+            }
+        } else {
+            lengthMenu();
+            return;
+        }
+        const int choice = host.popup(items);
+        if (choice < 0) return;
+        if (which == 0) engine.setTempo(values[size_t(choice)]);
+        if (which == 1) engine.trigSetSwing(int(values[size_t(choice)]));
+        if (which == 2) engine.trigSetMasterLength(int(values[size_t(choice)]));
+        changed();
+        refresh();
+    }
+    // A click (no drag) on some knobs opens the list of their values.
+    bool knobMenu(int index) {
+        const auto list = knobs();
+        const auto& k = list[size_t(index)];
+        if (!k.enabled) return false;
+        std::vector<MenuItem> items;
+        int current = 0;
+        std::function<void(int)> apply;
+        if (k.kind == 2 && Field(k.id) == Field::Condition) {
+            const TrigStep* st = fieldStep();
+            current = st ? st->condition : 0;
+            for (int c = 0; c < trigConditionCount(); ++c)
+                items.push_back({std::string(trigConditionName(c)) + conditionHelp(c), c == current});
+            apply = [&](int c) { setField(Field::Condition, c); };
+        } else if (k.kind == 3 && k.id == 3) {
+            const auto dests = lfoDestinations(ui.selectedTrack);
+            for (size_t i = 0; i < dests.size(); ++i)
+                items.push_back({i == 0 ? std::string("aucune") : trigParamName(dests[i], &snap->edits[size_t(ui.selectedTrack)]),
+                                 dests[i] == int(this->current().lfo.destination)});
+            apply = [&](int c) {
+                setLfoField(3, c);
+                if (c > 0 && this->current().lfo.depth == 0) setLfoField(2, 50);
+            };
+        } else if (k.kind == 3 && (k.id == 0 || k.id == 1 || k.id == 4)) {
+            const int count = k.id == 0 ? LfoWaves : (k.id == 1 ? TrigLfoSpeeds : LfoModes);
+            const auto& lfo = this->current().lfo;
+            const int value = k.id == 0 ? lfo.wave : (k.id == 1 ? lfo.speed : lfo.mode);
+            for (int c = 0; c < count; ++c)
+                items.push_back({k.id == 0 ? trigLfoWaveName(c) : (k.id == 1 ? trigLfoSpeedName(c) : trigLfoModeName(c)), c == value});
+            const int id = k.id;
+            apply = [&, id](int c) { setLfoField(id, c); };
+        } else if (k.kind == 5 && k.id == 4) {
+            for (int c = 0; c < DelayDivisions; ++c) items.push_back({delayDivisionName(c), c == snap->sendFx.delayDivision});
+            apply = [&](int c) { setShared(4, c / double(DelayDivisions - 1)); };
+        } else
+            return false;
+        const int choice = host.popup(items);
+        if (choice >= 0) apply(choice);
+        return true;
+    }
+    static std::string conditionHelp(int condition) {
+        const std::string name = trigConditionName(condition);
+        if (condition == TrigCondNone) return "  (joue toujours)";
+        if (name == "FILL") return "  (seulement avec FILL)";
+        if (name == "!FILL") return "  (seulement sans FILL)";
+        if (name == "1ST") return "  (premier passage seulement)";
+        if (name == "!1ST") return "  (sauf le premier passage)";
+        if (name == "PRE") return "  (si le trig précédent a joué)";
+        if (name == "!PRE") return "  (si le trig précédent n'a pas joué)";
+        if (name == "NEI") return "  (si la piste voisine a joué)";
+        if (name == "!NEI") return "  (si la piste voisine n'a pas joué)";
+        const auto colon = name.find(':');
+        if (colon != std::string::npos) return "  (joue au passage " + name.substr(0, colon) + " sur " + name.substr(colon + 1) + ")";
+        return "";
+    }
     void lengthMenu() {
         static const int lengths[] = {4, 6, 8, 12, 16, 24, 32, 48, 64};
         std::vector<MenuItem> items;
@@ -1685,6 +1844,7 @@ struct TrigUI::Impl {
         } else {
             engine.selectSequence(index);
             ui.latched.clear();
+            focusStep = -1;
         }
         refresh();
     }
@@ -1725,6 +1885,7 @@ struct TrigUI::Impl {
         p.round(r.x, r.y, r.w, r.h, 10, hot ? Panel2 : Panel);
         if (!k.kind) {
             p.roundFrame(r.x, r.y, r.w, r.h, 10, Panel2);
+            p.text(r.x, r.y + r.h / 2 - 10, r.w, 20, "—", 13, Dim, Align::Center);
             return;
         }
         const Color mark = k.scene ? Green : Red;
@@ -1747,11 +1908,11 @@ struct TrigUI::Impl {
         else if (k.scene)
             p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "SCÈNE · 2 clics = retirer", 11, Green, Align::Center);
         else if (k.ccSlot >= 0 && large)
-            p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "molette sur le titre = n° CC", 11, Dim, Align::Center);
+            p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "molette titre = n° CC", 11, Dim, Align::Center);
     }
     void paintScenes(Painter& p) {
         const auto& pat = pattern();
-        p.text(MainX + 262, MacroY, 946, 28,
+        p.text(MainX + 440, MacroY, 768, 28,
                editScene >= 0
                    ? "SCÈNE " + std::to_string(editScene + 1) + " EN ÉDITION : les potards de toutes les pistes écrivent dans la scène"
                    : "clic = éditer une scène · clic droit = A / B, copier, effacer · le crossfader passe de A à B",
@@ -1963,7 +2124,8 @@ struct TrigUI::Impl {
         for (int page = 0; page < 4; ++page) {
             const auto r = stepPageRect(page);
             const bool usable = page < pages();
-            button(p, r, std::to_string(page * 16 + 1) + "–" + std::to_string(page * 16 + 16), ui.stepPage == page, Blue, 12, usable);
+            button(p, r, (usable ? "" : "+ ") + std::to_string(page * 16 + 1) + "–" + std::to_string(page * 16 + 16), ui.stepPage == page,
+                   Blue, 12, usable);
             if (playStep >= 0 && playStep / 16 == page) p.fill(r.x + 8, r.y + r.h - 4, r.w - 16, 3, Green);
         }
         button(p, FollowRect, "SUIVRE", follow, Green, 12);
@@ -1988,7 +2150,9 @@ struct TrigUI::Impl {
                 continue;
             }
             if (!st.trig && st.lockCount > 0) { p.roundFrame(r.x + 4, r.y + 4, r.w - 8, r.h - 8, 7, Red, 2); }
-            p.roundFrame(r.x, r.y, r.w, r.h, 9, latched ? White : (i % 4 == 0 ? Dim : Line), latched ? 3 : 1);
+            const bool focused = !latched && ui.latched.empty() && step == focusStep;
+            p.roundFrame(r.x, r.y, r.w, r.h, 9, latched ? White : (focused ? Orange : (i % 4 == 0 ? Dim : Line)),
+                         latched || focused ? 3 : 1);
             const Color label = st.trig ? Bg : Muted;
             p.text(r.x + 8, r.y + 6, 40, 18, std::to_string(step + 1), 12, label, Align::Left, true);
             if (st.lockCount > 0) {
@@ -2018,10 +2182,15 @@ struct TrigUI::Impl {
             if (head) p.fill(r.x, r.y + r.h + 5, r.w, 5, Green);
         }
         // Latch info
-        if (ui.latched.empty())
+        if (ui.latched.empty() && focusStep >= 0 && focusStep < tr.length)
             p.text(LatchInfo.x, LatchInfo.y, LatchInfo.w + 500, LatchInfo.h,
-                   "Aucun pas sélectionné : les potards règlent le son de la piste. Sélectionne des pas (clic droit) pour poser des "
-                   "parameter locks.",
+                   "PAS " + std::to_string(focusStep + 1) +
+                       " choisi (contour orange) : réglé par la page TRIG · re-clic dessus = le retirer",
+                   12, Orange, Align::Left, true);
+        else if (ui.latched.empty())
+            p.text(LatchInfo.x, LatchInfo.y, LatchInfo.w + 500, LatchInfo.h,
+                   "Clique un pas pour le poser et le régler (page TRIG). Clic droit sur des pas = sélection : les potards de son "
+                   "deviennent des parameter locks.",
                    12, Muted, Align::Left);
         else {
             int locks = 0;
@@ -2070,6 +2239,15 @@ struct TrigUI::Impl {
             if (!(ui.page == 1 && !isMidi(sel) && i >= 5))
                 drawKnob(p, knobRect(i), list[size_t(i)], dragKnob == i || knobRect(i).in(mouseX, mouseY));
         if (ui.page == 1 && !isMidi(sel)) paintWaveform(p);
+        if (fxPage() && snap->edits[sel].inserts[size_t(ui.page - 3)].effect == InsertEffect::None) {
+            p.round(MainX, KnobY, MainW, KnobH, 12, Panel);
+            p.roundFrame(MainX, KnobY, MainW, KnobH, 12, Blue, 2);
+            p.text(MainX, KnobY + KnobH / 2 - 40, MainW, 40,
+                   "FX" + std::to_string(ui.page - 2) + " est vide : clique ici pour choisir un effet", 22, Blue, Align::Center, true);
+            p.text(MainX, KnobY + KnobH / 2 + 8, MainW, 24,
+                   "Filtres, saturations, compresseurs, delays, lo-fi… (31 effets Airwindows, 4 emplacements par piste)", 13, Muted,
+                   Align::Center);
+        }
         if (ui.page == sharedPage(sel))
             p.text(MainX, KnobY + KnobH + 2, MainW, 16,
                    "Les pistes envoient vers ces effets avec ENVOI RÉVERBE / ENVOI DELAY (page AMP, verrouillables par pas et modulables "
@@ -2080,10 +2258,10 @@ struct TrigUI::Impl {
                    "LFO : FORME et CYCLE (en pas de la piste) · PROFONDEUR ± autour de la valeur · MODE LIBRE / TRIG (repart à chaque "
                    "trig) / UNE FOIS (enveloppe)",
                    11, Muted, Align::Left);
-        else if (ui.page == 0 && ui.latched.empty())
+        else if (ui.page == 0 && fieldTargets().empty())
             p.text(MainX, KnobY + KnobH + 2, MainW, 16,
-                   "Sans sélection : NOTE, VÉLOCITÉ et LONGUEUR sont les valeurs des nouveaux trigs de la piste. Sélectionne un pas pour "
-                   "régler sa probabilité, sa condition, son micro-timing et son retrig.",
+                   "Aucun pas choisi : NOTE, VÉLOCITÉ et LONGUEUR règlent les futurs trigs. Clique un pas pour régler sa probabilité, sa "
+                   "condition, son micro-timing, son retrig et son slide.",
                    11, Muted, Align::Left);
         else if (ui.page == 0)
             p.text(MainX, KnobY + KnobH + 2, MainW, 16,
@@ -2091,13 +2269,13 @@ struct TrigUI::Impl {
                    "piste voisine · 1ST = premier passage",
                    11, Muted, Align::Left);
         // Macros / scenes
-        button(p, ViewMacros, "MACROS", !sceneView, Blue, 12);
-        button(p, ViewScenes, "SCÈNES", sceneView, Green, 12);
+        button(p, ViewMacros, "MACROS (8 potards)", !sceneView, Blue, 12);
+        button(p, ViewScenes, "SCÈNES + CROSSFADER", sceneView, Green, 12);
         if (sceneView)
             paintScenes(p);
         else {
-            p.text(MainX + 262, MacroY, 946, 28,
-                   "touche un potard puis clic droit sur une macro pour l'assigner · MIDI Learn pour ton LPD8 / MPK", 11, Muted,
+            p.text(MainX + 440, MacroY, 768, 28,
+                   "glisser = jouer · clic droit = assigner le dernier potard touché · MIDI Learn pour ton LPD8 / MPK", 11, Muted,
                    Align::Left);
             for (int i = 0; i < 8; ++i) {
                 const auto r = macroRect(i);
@@ -2106,10 +2284,10 @@ struct TrigUI::Impl {
                 k.kind = 1;
                 k.enabled = m.track >= 0;
                 k.value = m.value;
-                k.label = "M" + std::to_string(i + 1) +
-                          (m.track >= 0 ? " · T" + std::to_string(m.track + 1) + " " + trigParamName(m.param, &snap->edits[size_t(m.track)])
-                                        : "");
-                k.display = m.track >= 0 ? trigParamDisplay(m.param, m.value) : "non assignée";
+                std::string name = m.track >= 0 ? trigParamName(m.param, &snap->edits[size_t(m.track)]) : "";
+                if (name.rfind("ENVOI ", 0) == 0) name = name.substr(6);
+                k.label = "M" + std::to_string(i + 1) + (m.track >= 0 ? " · " + name : "");
+                k.display = m.track >= 0 ? "T" + std::to_string(m.track + 1) + " · " + trigParamDisplay(m.param, m.value) : "non assignée";
                 if (learnMacro == i) { k.display = "LEARN…"; }
                 if (m.midiCc >= 0) k.label += " ·CC" + std::to_string(m.midiCc);
                 Rect small{r.x, r.y, r.w, r.h};
@@ -2209,18 +2387,24 @@ struct TrigUI::Impl {
                 dragHeader = 0;
                 dragStart = snap->tempo;
                 dragStartY = y;
+                dragStartX = x;
+                dragMoved = false;
                 return;
             }
             if (HeaderSwing.in(x, y)) {
                 dragHeader = 1;
                 dragStart = pattern().swing;
                 dragStartY = y;
+                dragStartX = x;
+                dragMoved = false;
                 return;
             }
             if (HeaderMaster.in(x, y)) {
                 dragHeader = 2;
                 dragStart = pattern().masterLength;
                 dragStartY = y;
+                dragStartX = x;
+                dragMoved = false;
                 return;
             }
         }
@@ -2293,6 +2477,8 @@ struct TrigUI::Impl {
                 dragHeader = 3;
                 dragStart = current().length;
                 dragStartY = y;
+                dragStartX = x;
+                dragMoved = false;
             }
             return;
         }
@@ -2323,6 +2509,7 @@ struct TrigUI::Impl {
         if (TrackClear.in(x, y)) {
             engine.trigClearTrack(sel);
             ui.latched.clear();
+            focusStep = -1;
             changed();
             refresh();
             status("Pas de la piste effacés.");
@@ -2330,7 +2517,10 @@ struct TrigUI::Impl {
         }
         for (int page = 0; page < 4; ++page)
             if (stepPageRect(page).in(x, y)) {
-                if (page < pages()) ui.stepPage = page;
+                if (page < pages())
+                    ui.stepPage = page;
+                else
+                    extendMenu(page);
                 return;
             }
         if (FollowRect.in(x, y)) {
@@ -2357,17 +2547,29 @@ struct TrigUI::Impl {
                 toggleLatch(step);
                 return;
             }
-            // Elektron style: an empty step gets its trig at once; a trig is removed on release,
-            // unless the wheel was used meanwhile to lock a parameter on it.
-            const bool newValue = !current().steps[size_t(step)].trig;
-            paintStep = step;
-            paintValue = newValue;
+            // Click on an empty step: trig + chosen. Click on another trig: chosen (edited on TRIG page).
+            // Click again on the chosen trig: removed on release (unless the wheel locked something meanwhile).
+            const bool has = current().steps[size_t(step)].trig;
             pressStep = step;
-            pressPending = !newValue;
-            if (newValue) {
+            if (!has) {
                 engine.trigToggle(sel, step);
+                focusStep = step;
+                paintStep = step;
+                paintValue = true;
+                pressPending = false;
                 changed();
                 refresh();
+                if (ui.latched.empty())
+                    status("Pas " + std::to_string(step + 1) + " posé et choisi : règle-le sur la page TRIG. Re-clic = retirer.");
+            } else if (focusStep != step && ui.latched.empty()) {
+                focusStep = step;
+                paintStep = -1;
+                pressPending = false;
+                status("Pas " + std::to_string(step + 1) + " choisi : règle-le sur la page TRIG. Re-clic = retirer.");
+            } else {
+                paintStep = step;
+                paintValue = false;
+                pressPending = true;
             }
             return;
         }
@@ -2415,6 +2617,11 @@ struct TrigUI::Impl {
             status(fx.delayPingPong ? "Delay en ping-pong (gauche / droite)." : "Delay stéréo normal.");
             return;
         }
+        if (fxPage() && snap->edits[sel].inserts[size_t(ui.page - 3)].effect == InsertEffect::None && y >= KnobY && y < KnobY + KnobH &&
+            x >= MainX && x < MainX + MainW) {
+            effectMenu(ui.page - 3);
+            return;
+        }
         for (int i = 0; i < 8; ++i) {
             const auto r = knobRect(i);
             if (!r.in(x, y)) continue;
@@ -2445,16 +2652,19 @@ struct TrigUI::Impl {
                 return;
             }
             const auto now = std::chrono::steady_clock::now();
-            if (lastKnobClick == i && now - lastKnobTime < std::chrono::milliseconds(400)) {
+            if (lastKnobClick == i && lastKnobClean && now - lastKnobTime < std::chrono::milliseconds(350)) {
                 lastKnobClick = -1;
                 resetKnob(k);
                 return;
             }
             lastKnobClick = i;
             lastKnobTime = now;
+            lastKnobClean = false;
             dragKnob = i;
             dragStart = k.value;
             dragStartY = y;
+            dragStartX = x;
+            dragMoved = false;
             if (k.kind == 1) {
                 lastParam = k.id;
                 lastTrack = sel;
@@ -2504,6 +2714,8 @@ struct TrigUI::Impl {
                 dragMacro = i;
                 dragStart = macros[size_t(i)].value;
                 dragStartY = y;
+                dragStartX = x;
+                dragMoved = false;
             }
             return;
         }
@@ -2515,8 +2727,11 @@ struct TrigUI::Impl {
     void mouseMove(int x, int y, int modifiers) {
         mouseX = x;
         mouseY = y;
-        const int dy = dragStartY - y;
+        // Knobs and values follow the mouse up/down AND left/right.
+        const int dy = (dragStartY - y) + (x - dragStartX);
+        if (std::abs(dragStartY - y) + std::abs(x - dragStartX) > 3) dragMoved = true;
         const bool fine = (modifiers & ModShift) != 0;
+        if ((dragKnob >= 0 || dragMacro >= 0 || dragHeader >= 0) && !dragMoved) return;
         if (dragKnob >= 0) {
             knobAbsolute(dragKnob, dragStart, dy, fine);
             return;
@@ -2574,6 +2789,7 @@ struct TrigUI::Impl {
         const int step = pressStep;
         pressPending = false;
         if (step < 0 || step >= current().length || !current().steps[size_t(step)].trig) return;
+        if (step == focusStep) focusStep = -1;
         engine.trigToggle(ui.selectedTrack, step);
         refresh();
         auto it = std::find(ui.latched.begin(), ui.latched.end(), step);
@@ -2592,7 +2808,23 @@ struct TrigUI::Impl {
             engine.setFill(fillKey);
         }
         const bool macro = dragMacro >= 0;
+        const int clickedKnob = dragKnob, clickedHeader = dragHeader;
+        const bool clicked = !dragMoved;
+        if (clickedKnob >= 0) lastKnobClean = clicked;
         dragKnob = dragMacro = dragHeader = paintStep = -1;
+        if (clicked && clickedHeader >= 0) {
+            dragFader = false;
+            gestureOpen = false;
+            gesture.clear();
+            headerMenu(clickedHeader);
+            return;
+        }
+        if (clicked && clickedKnob >= 0 && knobMenu(clickedKnob)) {
+            dragFader = false;
+            gestureOpen = false;
+            gesture.clear();
+            return;
+        }
         dragFader = false;
         gestureOpen = false;
         gesture.clear();
@@ -2906,6 +3138,7 @@ struct TrigUI::Impl {
                 break;
             }
             ui.latched.clear();
+            focusStep = -1;
             if (editScene >= 0) {
                 editScene = -1;
                 status("Édition de scène terminée.");
@@ -3093,6 +3326,9 @@ void TrigUI::loadDemo() {
     auto& e = impl->engine;
     impl->loadKit();
     e.setTempo(122);
+    // Bass: low-pass filter active in FX1, opened by scene B / macro 6.
+    e.setInsertBypass(12, 0, false);
+    e.setInsertParameter(12, 0, 0, .55);
     auto set = [&](int t, std::initializer_list<int> steps) {
         for (int s : steps) e.trigToggle(t, s);
     };
@@ -3147,11 +3383,28 @@ void TrigUI::loadDemo() {
         clapTrack.sendDelay = 250;
         e.trigSetTrackConfig(4, clapTrack);
     }
+    // Scenes: A = the pattern as it is, B = dub version (filtered bass, short kick, wet snare and clap).
+    e.trigSetSceneAB(0, 1);
+    e.trigSetSceneValue(1, 12, trigFxParam(0, 0), .12);
+    e.trigSetSceneValue(1, 0, TrigDecay, .15);
+    e.trigSetSceneValue(1, 1, TrigSendReverb, .9);
+    e.trigSetSceneValue(1, 4, TrigSendDelay, .8);
+    e.trigSetSceneValue(1, 2, TrigPitch, (24 + 7) / 48.);
+    e.setCrossfader(0);
+    // LFO: closed hat moves in the stereo field.
+    {
+        TrigLfo lfo;
+        lfo.wave = 0;
+        lfo.speed = 4;
+        lfo.destination = uint8_t(TrigPan);
+        lfo.depth = 60;
+        e.trigSetLfo(2, lfo);
+    }
     impl->refresh();
+    impl->defaultMacros();
     dirty = false;
     impl->updateTitle();
-    status = "Pattern de démo : grosse caisse, caisse claire avec FILL et réverbe, charleston à 70 %, clap dans le delay, basse sur 12 pas "
-             "avec locks de hauteur. " +
-             std::string(impl->host.isPlugin() ? "Lance la lecture dans Live." : "Espace pour jouer.");
+    status = "Démo : " + std::string(impl->host.isPlugin() ? "lance la lecture dans Live" : "Espace pour jouer") +
+             ", puis bouge le CROSSFADER (onglet SCÈNES) ou les MACROS. Clique un pas pour le régler.";
 }
 } // namespace trig

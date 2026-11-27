@@ -1,5 +1,17 @@
 # KINETAKT — versions
 
+## 0.8.0 — prise en main
+- **Mode d'emploi** illustré en français (`MODE-EMPLOI-KINETAKT.pdf`, dans le ZIP et sur GitHub).
+- **Clic sur un pas = il est choisi** (contour orange) et la page TRIG règle directement sa probabilité, sa condition, son micro-timing, son retrig et son slide. Plus besoin du clic droit pour ça. Re-clic sur le pas choisi = le retirer.
+- Régler un réglage TRIG sur un pas vide y pose un trig au lieu de ne rien faire.
+- Les potards se tournent aussi en glissant de gauche à droite ; un message dit quand un réglage est déjà au maximum ou au minimum ; le double-clic ne se déclenche plus par erreur.
+- Clic (sans glisser) = liste de valeurs pour TEMPO, SWING, LONG. MAÎTRE, LONGUEUR, CONDITION, et pour FORME, CYCLE, DESTINATION et MODE du LFO et TEMPS du delay. Choisir une destination de LFO règle aussi une profondeur pour l'entendre tout de suite.
+- **+ 17–32** (et suivantes) sur une piste courte propose de l'allonger (pas vides ou recopiés).
+- Page FX vide : un grand bouton « choisir un effet » ; les cases sans réglage affichent « — ».
+- Onglets **MACROS (8 potards)** et **SCÈNES + CROSSFADER** plus visibles.
+- **DECAY** raccourcit vraiment le son avec SUSTAIN à 100 % (enveloppe façon Elektron) ; à 0, il s'affiche « entier ».
+- **Démo complète** : scène B « dub » pour que le crossfader s'entende, LFO sur le charleston, filtre actif sur la basse, et 8 macros déjà assignées au premier lancement.
+
 ## 0.7.1
 - **ELEKTAKT devient KINETAKT** (application, plugin, ZIP, dossier Documents\KINETAKT, projets `.kinetakt`).
   - Les projets `.elektakt` s'ouvrent toujours, les réglages et appareils MIDI de l'ancienne version sont repris.

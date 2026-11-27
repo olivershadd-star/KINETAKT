@@ -3,7 +3,7 @@
 # KINETAKT
 ### ELEKTRON-STYLE SEQUENCER · SOUND + MIDI TRACKS · FREE
 
-![Status](https://img.shields.io/badge/VERSION-0.7.1-3DDC84?style=for-the-badge&labelColor=10151E)
+![Status](https://img.shields.io/badge/VERSION-0.8.0-3DDC84?style=for-the-badge&labelColor=10151E)
 ![Windows](https://img.shields.io/badge/WINDOWS-10%20%2F%2011_X64-19B9FF?style=for-the-badge&labelColor=10151E)
 ![VST3](https://img.shields.io/badge/VST3-ABLETON_LIVE-19B9FF?style=for-the-badge&labelColor=10151E)
 ![Licence](https://img.shields.io/badge/LICENCE-AGPL--3.0--or--later-F5C343?style=for-the-badge&labelColor=10151E)
@@ -11,6 +11,7 @@
 **ANKS LABS // BUILD. BREAK. REWIRE. LISTEN.**
 
 [![TÉLÉCHARGER](https://img.shields.io/badge/T%C3%89L%C3%89CHARGER-DERNI%C3%88RE_VERSION-EF343E?style=for-the-badge&labelColor=10151E)](../../releases/latest)
+[![MODE D'EMPLOI](https://img.shields.io/badge/MODE_D'EMPLOI-PDF-19B9FF?style=for-the-badge&labelColor=10151E)](docs/MODE-EMPLOI-KINETAKT.pdf)
 [![TOUTES LES VERSIONS](https://img.shields.io/badge/TOUTES_LES-VERSIONS-F5C343?style=for-the-badge&labelColor=10151E)](../../releases)
 
 </div>
@@ -23,9 +24,10 @@
 
 ## 01 // TÉLÉCHARGER ET LANCER — DOWNLOAD & RUN
 
-1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `KINETAKT-Windows-x64-0.7.1.zip` (le numéro est dans le nom : prends toujours le plus grand).
+1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `KINETAKT-Windows-x64-0.8.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
 2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `KINETAKT.exe`.
 3. Lance **KINETAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
+4. Ouvre le **mode d'emploi** (`MODE-EMPLOI-KINETAKT.pdf`, dans le ZIP ou [ici](docs/MODE-EMPLOI-KINETAKT.pdf)) : 12 pages illustrées, tout y est expliqué pas à pas.
 
 ![KINETAKT — scènes et crossfader](docs/apercu-scenes.png)
 
@@ -56,7 +58,7 @@ Le ZIP contient aussi **`VST3/KINETAKT.vst3`** : le même séquenceur, les même
 
 | Fonction | Comment faire |
 |:--|:--|
-| **Trig** | Clic sur un pas vide = trig. Clic sur un trig = le retirer (au relâchement). Glisser la souris peint plusieurs pas. |
+| **Trig** | Clic sur un pas vide = trig, et le pas est **choisi** (contour orange) : la page TRIG règle sa probabilité, sa condition, son micro-timing, son retrig, son slide. Clic sur un autre trig = le choisir. Re-clic sur le pas choisi = le retirer. Glisser la souris peint plusieurs pas. |
 | **Parameter lock** | **Clic droit** sur un ou plusieurs pas (ils s'entourent de blanc), puis tourne un potard : la valeur ne s'applique qu'à ces pas. Le potard devient rouge, le pas reçoit un point rouge. Clic droit ou **double-clic** sur le potard = retirer le lock. **Plus rapide** : maintiens le clic sur un pas et tourne la **molette** : le dernier potard touché est verrouillé sur ce pas. |
 | **Trigless lock** | Même geste sur un pas **vide** : il change le son en cours (filtre, effets, pan, CC MIDI…) sans rejouer de note. Cadre rouge. |
 | **Trig conditions** | Page **TRIG**, potard **CONDITION** : `1:2`… `8:8` (joue au passage A sur B), `FILL` / `!FILL` (bouton FILL ou touche F maintenue), `PRE` / `!PRE` (selon le dernier trig conditionnel de la piste), `NEI` / `!NEI` (selon la piste au-dessus), `1ST` / `!1ST` (premier passage). |
@@ -132,6 +134,7 @@ L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages d
 - [x] Version VST3 pour Ableton : synchro Live, sorties séparées, état dans le set (0.6.0)
 - [x] Réverbe et delay partagés avec envois verrouillables, timing à l'échantillon près, ergonomie (0.7.0)
 - [x] Nouveau nom KINETAKT, première version stable (0.7.1)
+- [x] Prise en main simplifiée et mode d'emploi illustré (0.8.0)
 
 ## 07 // COMPILER — BUILD FROM SOURCE
 

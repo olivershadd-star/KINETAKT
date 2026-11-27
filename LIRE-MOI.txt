@@ -1,15 +1,19 @@
 KINETAKT — séquenceur à la Elektron · ANKS Labs
 ============================================
 
+LE MODE D'EMPLOI ILLUSTRÉ EST DANS CE DOSSIER : MODE-EMPLOI-KINETAKT.pdf
+
 DÉMARRER
 1. Extrais tout le dossier ZIP (clic droit > Extraire tout), pas seulement KINETAKT.exe.
 2. Lance KINETAKT.exe. Un pattern de démonstration est chargé : appuie sur ESPACE.
-3. Clic sur un pas = poser / retirer un trig.
+3. Clic sur un pas vide = poser un trig ; le pas est alors CHOISI (contour orange) et la page TRIG
+   règle sa probabilité, sa condition, son micro-timing, son retrig. Re-clic dessus = le retirer.
+   Potards : glisser vers le haut / la droite, ou molette. Si rien ne bouge, lis la barre du bas.
 4. Clic droit sur un pas = le sélectionner, puis tourne un potard = PARAMETER LOCK.
    Plus rapide : maintiens le clic sur un pas et tourne la molette = lock du dernier potard touché.
    Double-clic sur un potard = retirer le lock (ou revenir à la valeur par défaut).
    Un pas vide sélectionné qui reçoit un lock devient un TRIGLESS LOCK (cadre rouge).
-5. Page TRIG : probabilité, CONDITION (1:4, FILL, PRE, NEI, 1ST…), micro-timing, retrig.
+5. Page TRIG (pas choisi ou sélectionné) : probabilité, CONDITION (1:4, FILL, PRE, NEI, 1ST…), micro-timing, retrig.
 6. Chaque piste a sa propre LONGUEUR (1 à 64 pas) et sa VITESSE (2x à 1/8x).
 7. Glisse un fichier WAV sur une piste pour charger ton propre son.
 8. SLIDE (page TRIG) : les valeurs verrouillées d'un pas glissent jusqu'au lock suivant.

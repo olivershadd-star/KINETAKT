@@ -222,7 +222,7 @@ int main(int argc, char** argv) {
     std::cout << "after redo step2 trig=" << s->sequences[0].trig.tracks[12].steps[1].trig << "\n";
     shot(ui, "ui-7-slide.png");
     ui.key(KeyEscape, true, 0);
-    ui.mouseDown(376 + 126 + 20, 670, 0, 0);
+    ui.mouseDown(376 + 176 + 40, 670, 0, 0);
     ui.mouseUp(0, 0, 0); // SCÈNES view
     ui.mouseDown(376 + 1 * 75 + 20, 720, 0, 0);
     ui.mouseUp(0, 0, 0); // edit scene 2
@@ -351,6 +351,36 @@ int main(int argc, char** argv) {
     ui.page = 1;
     ui.mouseMove(376 + 30, 300, 0);
     shot(ui, "ui-15-waveform.png");
+    // v0.8: a click chooses a step for the TRIG page; knobs on an empty step place a trig; empty FX page.
+    ui.key(KeyEscape, true, 0);
+    ui.mouseDown(100, 124 + 0 * 46 + 20, 0, 0);
+    ui.mouseUp(0, 0, 0);
+    ui.page = 0;
+    ui.mouseDown(376 + 2 * 74 + 30, 280, 0, 0); // empty step 3 → trig + chosen
+    ui.mouseUp(0, 0, 0);
+    ui.mouseDown(376 + 3 * 151 + 60, 520, 0, 0); // probability: drag LEFT/down
+    ui.mouseMove(376 + 3 * 151 + 20, 540, 0);
+    ui.mouseUp(0, 0, 0);
+    {
+        auto s8 = grab(*engine);
+        const auto& st = s8->sequences[0].trig.tracks[0].steps[2];
+        std::cout << "v0.8 click step3 trig=" << st.trig << " prob=" << int(st.probability) << " (" << ui.status << ")\n";
+    }
+    ui.mouseDown(376 + 4 * 151 + 60, 520, 0, 0); // click CONDITION → menu
+    ui.mouseUp(0, 0, 0);
+    shot(ui, "ui-16-trig-chosen.png");
+    ui.mouseDown(376 + 2 * 74 + 30, 280, 0, 0); // re-click → removed
+    ui.mouseUp(0, 0, 0);
+    {
+        auto s8 = grab(*engine);
+        std::cout << "v0.8 re-click step3 trig=" << s8->sequences[0].trig.tracks[0].steps[2].trig << "\n";
+    }
+    ui.page = 5;
+    shot(ui, "ui-17-fx-empty.png");
+    ui.mouseDown(376 + 1 * 96 + 40, 194, 0, 0); // page 17-32 on a 16-step track → extend menu
+    ui.mouseUp(0, 0, 0);
+    ui.mouseDown(560, 34, 0, 0); // swing click → menu
+    ui.mouseUp(0, 0, 0);
     std::cout << "status: " << ui.status << "\n";
     return 0;
 }

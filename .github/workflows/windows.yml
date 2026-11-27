@@ -75,7 +75,7 @@ jobs:
           New-Item -ItemType Directory -Force "$folder/VST3" | Out-Null
           Copy-Item -Recurse build/KINETAKT_VST3_artefacts/Release/VST3/KINETAKT.vst3 "$folder/VST3/"
           Copy-Item demo-kit/*.wav "$folder/demo-kit/"
-          Copy-Item LIRE-MOI.txt,README.md,CHANGELOG.md,NOTICES.txt,LICENSE "$folder/"
+          Copy-Item LIRE-MOI.txt,README.md,CHANGELOG.md,NOTICES.txt,LICENSE,docs/MODE-EMPLOI-KINETAKT.pdf "$folder/"
           Compress-Archive -Path $folder -DestinationPath "dist/KINETAKT-Windows-x64-$version.zip" -Force
 
       - name: Publish release
@@ -91,7 +91,7 @@ jobs:
           body: |
             **KINETAKT — séquenceur à la Elektron, ANKS Labs.**
 
-            Télécharge `KINETAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous et extrais-le entièrement.
+            Télécharge `KINETAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous et extrais-le entièrement. Le **mode d'emploi** (PDF) est dans le ZIP.
             - **Application** : lance `KINETAKT.exe`.
             - **Plugin VST3 pour Ableton** : copie le dossier `VST3/KINETAKT.vst3` dans `C:\Program Files\Common Files\VST3`, puis relance l'analyse des plugins dans Live.
             Aucune installation. Pour envoyer le MIDI vers Ableton, installe loopMIDI (gratuit) — voir le README.

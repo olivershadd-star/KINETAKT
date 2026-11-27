@@ -728,7 +728,7 @@ public:
             break;                           // track 16 → MIDI
         case 5: click(376 + 20, 280); break; // trig
         case 6:
-            click(376 + 126 + 20, 670);
+            click(376 + 176 + 40, 670);
             click(376 + 75 + 20, 720);
             break; // scenes view, edit scene 2
         case 7:
