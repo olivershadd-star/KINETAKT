@@ -3,7 +3,7 @@
 # ELEKTAKT
 ### ELEKTRON-STYLE SEQUENCER · SOUND + MIDI TRACKS · FREE
 
-![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.2.0-EF343E?style=for-the-badge&labelColor=10151E)
+![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.3.0-EF343E?style=for-the-badge&labelColor=10151E)
 ![Windows](https://img.shields.io/badge/WINDOWS-10%20%2F%2011_X64-19B9FF?style=for-the-badge&labelColor=10151E)
 ![Licence](https://img.shields.io/badge/LICENCE-AGPL--3.0--or--later-F5C343?style=for-the-badge&labelColor=10151E)
 
@@ -22,7 +22,7 @@
 
 ## 01 // TÉLÉCHARGER ET LANCER — DOWNLOAD & RUN
 
-1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.2.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
+1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.3.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
 2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `ELEKTAKT.exe`.
 3. Lance **ELEKTAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
 
@@ -45,6 +45,7 @@
 | **Retrig** | Page TRIG, 1 à 8 coups dans le pas. |
 | **Parameter slide** | Page TRIG, potard **SLIDE** sur un pas sélectionné : ses valeurs verrouillées glissent en douceur jusqu'au prochain lock du même paramètre (volume, pan, enveloppe, effets, CC MIDI). Le pas affiche « SLIDE ». |
 | **Scènes + crossfader** | En bas, onglet **SCÈNES** : 16 scènes par pattern. Clic sur une scène = édition : les potards de **toutes les pistes** écrivent dans la scène (potard vert). Clic droit = la mettre en **A** ou en **B**. Le **crossfader** passe en douceur de A à B, à la souris, à la molette ou avec un potard MIDI (clic droit = MIDI Learn). |
+| **LFO** | Page **LFO** de chaque piste : FORME (sinus, triangle, rampes, carré, aléatoire), CYCLE (½ à 256 pas, calé sur la piste), PROFONDEUR (±), DESTINATION (enveloppe, volume, pan, paramètres d'effet, ou un CC pour les pistes MIDI) et MODE (LIBRE, TRIG = repart à chaque trig, UNE FOIS = enveloppe). Le potard SORTIE montre l'LFO en mouvement. |
 | **Copier / coller** | Pas sélectionnés : **COPIER LES PAS** puis sélectionne le pas de départ et **COLLER ICI** (ou Ctrl+C / Ctrl+V). **COPIER PAGE / COLLER PAGE** pour 16 pas d'un coup. Sans sélection, Ctrl+C / Ctrl+V copie la piste entière. |
 | **Annuler** | **Ctrl+Z** annule, **Ctrl+Y** rétablit (64 niveaux) : pas, locks, réglages de piste, scènes. Les réglages de son (sample, effets choisis) ne sont pas concernés. |
 | **Longueur / vitesse par piste** | En haut : **LONGUEUR** (1 à 64 pas, molette ou glisser, clic droit = valeurs rapides) et **VITESSE** (2x, 1x, 1/2x, 1/4x, 1/8x). Des pistes de longueurs différentes créent des polyrythmies. |
@@ -54,11 +55,12 @@
 | **Song** | Bouton SONG : enchaîne des patterns (×1, ×2, ×4), puis « Jouer le song ». |
 | **Macros M1–M8** | Touche un potard, puis clic droit sur une macro → Assigner. **MIDI Learn** pour la piloter avec un LPD8, un MPK mini… |
 | **REC** | Arme REC, lance la lecture et joue sur ton clavier MIDI : les notes s'écrivent sur la piste sélectionnée. |
+| **Mode pads** | **RÉGLAGES → Entrée MIDI : pads** : les notes 36 à 51 (les pads d'un MPK mini, d'un LPD8…) jouent directement les pistes 1 à 16, et s'enregistrent sur la bonne piste avec REC. |
 
-**Pistes SON** : pages **SRC** (hauteur, début, fin, volume, pan), **AMP** (enveloppe ADSR) et **FX1–FX4** (31 effets Airwindows : filtres, saturations, compresseurs, delays, réverbes, lo-fi…). Tout est verrouillable par pas.
+**Pistes SON** : pages **SRC** (hauteur, début, fin, volume, pan), **AMP** (enveloppe ADSR), **FX1–FX4** (31 effets Airwindows : filtres, saturations, compresseurs, delays, réverbes, lo-fi…) et **LFO**. Tout est verrouillable par pas (sauf les réglages du LFO).
 Charge un son par **glisser-déposer** d'un WAV sur la piste, ou clic droit → *Charger un sample*.
 
-**Pistes MIDI** : page **TRIG** (note, vélocité, longueur) et page **CC MIDI** (8 contrôleurs, numéro réglable à la molette sur le titre). Les notes, les CC verrouillés et l'horloge partent vers la sortie MIDI choisie.
+**Pistes MIDI** : page **TRIG** (note, vélocité, longueur) et page **CC MIDI** (8 contrôleurs, numéro réglable à la molette sur le titre) et page **LFO** (vers un des 8 CC). Les notes, les CC verrouillés et l'horloge partent vers la sortie MIDI choisie.
 
 ## 03 // RELIER À ABLETON — CONNECT TO ABLETON
 
@@ -71,7 +73,7 @@ Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI 
 
 ## 04 // RACCOURCIS — SHORTCUTS
 
-`Espace` lecture / stop · `F` maintenu = FILL · `Échap` relâcher la sélection · `Suppr` effacer les locks sélectionnés · `←` `→` pages de pas · `↑` `↓` pistes · `F1`–`F8` pages de potards · `R` REC · `Ctrl+S` enregistrer · `Ctrl+O` ouvrir · `Ctrl+N` nouveau · `Ctrl+C` / `Ctrl+V` copier / coller (pas sélectionnés ou piste) · `Ctrl+Z` / `Ctrl+Y` annuler / rétablir · `Maj` + potard = réglage fin.
+`Espace` lecture / stop · `F` maintenu = FILL · `Échap` relâcher la sélection · `Suppr` effacer les locks sélectionnés · `←` `→` pages de pas · `↑` `↓` pistes · `F1`–`F8` pages de potards (TRIG, SRC, AMP, FX1–FX4, LFO) · `R` REC · `Ctrl+S` enregistrer · `Ctrl+O` ouvrir · `Ctrl+N` nouveau · `Ctrl+C` / `Ctrl+V` copier / coller (pas sélectionnés ou piste) · `Ctrl+Z` / `Ctrl+Y` annuler / rétablir · `Maj` + potard = réglage fin.
 
 ## 05 // FICHIERS — FILES
 
@@ -92,6 +94,7 @@ L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages d
 - [x] Macros M1–M8 avec MIDI Learn, import des projets KICK
 - [x] Scènes avec crossfader A/B, parameter slide (0.2.0)
 - [x] Copier / coller de pas et de pages, annuler / rétablir (0.2.0)
+- [x] LFO par piste, mode pads pour l'entrée MIDI (0.3.0)
 - [ ] Version VST3 pour Ableton
 
 ## 07 // COMPILER — BUILD FROM SOURCE

@@ -1,5 +1,10 @@
 # ELEKTAKT — versions
 
+## 0.3.0
+- **LFO par piste** (page LFO) : 6 formes, cycle de ½ à 256 pas calé sur la vitesse de la piste, profondeur ±, destination (enveloppe, volume, pan, paramètres d'effet, ou CC MIDI), modes LIBRE / TRIG / UNE FOIS, sortie visible en direct.
+- **Mode pads** pour l'entrée MIDI : notes 36–51 → pistes 1–16 (MPK mini, LPD8…), avec enregistrement REC sur la bonne piste.
+- Format de projet v3 : les projets 0.1.0 et 0.2.0 s'ouvrent toujours.
+
 ## 0.2.0
 - **Scènes** : 16 par pattern, édition en direct sur toutes les pistes, scènes A / B et **crossfader** (souris, molette, MIDI Learn).
 - **Parameter slide** : les valeurs verrouillées d'un pas glissent jusqu'au lock suivant (volume, pan, enveloppe, effets, CC MIDI).

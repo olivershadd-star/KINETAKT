@@ -268,7 +268,7 @@ public:
         case 6:click(376+126+20,670);click(376+75+20,720);break;   // scenes view, edit scene 2
         case 7:ui->page=2;ui->wheel(376+151+40,500,-5,0);click(376+90+400,784);break; // scene value + crossfader
         case 8:ui->key('Z',true,trig::ModControl);ui->key('Y',true,trig::ModControl);break; // undo / redo
-        case 9:ui->key(trig::KeySpace,true,0);break; // stop
+        case 9:click(100,124+2*46+20);ui->page=7;ui->wheel(376+3*151+60,520,2,0);ui->wheel(376+2*151+60,520,40,0);ui->key(trig::KeySpace,true,0);break; // LFO page, stop
         case 10:InvalidateRect(window,nullptr,FALSE);break;
         default:DestroyWindow(window);break;
         }

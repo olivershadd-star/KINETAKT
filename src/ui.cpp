@@ -72,6 +72,7 @@ struct TrigUI::Impl {
     std::unique_ptr<TrigTrack> trackClipboard;std::unique_ptr<TrigPattern> patternClipboard;
     int tickCount=0;
     // v0.2: scenes, clipboards, undo.
+    bool padMode=false;
     bool sceneView=false;int editScene=-1;bool dragFader=false;int faderChannel=-1,faderCc=-1;bool learnFader=false;
     std::vector<std::pair<int,TrigStep>> stepClipboard;std::unique_ptr<std::array<TrigStep,16>> pageClipboard;std::unique_ptr<TrigScene> sceneClipboard;
     std::vector<std::pair<int,TrigPattern>> undoStack,redoStack;std::unique_ptr<TrigPattern> committed;int committedSequence=-1;
@@ -89,7 +90,7 @@ struct TrigUI::Impl {
         if(a.masterLength!=b.masterLength||a.swing!=b.swing||a.sceneA!=b.sceneA||a.sceneB!=b.sceneB)return false;
         for(int sc=0;sc<TrigScenes;++sc){const auto& x=a.scenes[size_t(sc)];const auto& y=b.scenes[size_t(sc)];if(x.count!=y.count)return false;for(int i=0;i<x.count;++i)if(x.locks[size_t(i)].track!=y.locks[size_t(i)].track||x.locks[size_t(i)].param!=y.locks[size_t(i)].param||x.locks[size_t(i)].value!=y.locks[size_t(i)].value)return false;}
         for(int t=0;t<TrigTracks;++t){const auto& x=a.tracks[size_t(t)];const auto& y=b.tracks[size_t(t)];
-            if(x.type!=y.type||x.length!=y.length||x.speed!=y.speed||x.midiChannel!=y.midiChannel||x.defaultNote!=y.defaultNote||x.defaultVelocity!=y.defaultVelocity||x.defaultLength!=y.defaultLength||x.ccNumber!=y.ccNumber||x.ccValue!=y.ccValue)return false;
+            if(x.type!=y.type||x.length!=y.length||x.speed!=y.speed||x.midiChannel!=y.midiChannel||x.defaultNote!=y.defaultNote||x.defaultVelocity!=y.defaultVelocity||x.defaultLength!=y.defaultLength||x.ccNumber!=y.ccNumber||x.ccValue!=y.ccValue||x.lfo.wave!=y.lfo.wave||x.lfo.speed!=y.lfo.speed||x.lfo.mode!=y.lfo.mode||x.lfo.destination!=y.lfo.destination||x.lfo.depth!=y.lfo.depth)return false;
             for(int i=0;i<TrigMaxSteps;++i)if(!sameStep(x.steps[size_t(i)],y.steps[size_t(i)]))return false;}
         return true;
     }
@@ -119,12 +120,17 @@ struct TrigUI::Impl {
         const auto& name=snap->names[t];return name.empty()?"Vide":name;
     }
     int pages()const{return (current().length+15)/16;}
-    void selectTrack(int t){t=std::clamp(t,0,TrigTracks-1);if(t!=ui.selectedTrack)ui.latched.clear();ui.selectedTrack=t;engine.selectTrack(t);ui.stepPage=std::min(ui.stepPage,std::max(0,pages()-1));if(isMidi(t)&&ui.page>1)ui.page=0;}
+    int lfoPage(int t)const{return isMidi(t)?2:3+InsertSlots;}
+    bool fxPage()const{return !isMidi(ui.selectedTrack)&&ui.page>=3&&ui.page<3+InsertSlots;}
+    // Keeps the LFO page when the track type changes; falls back to TRIG otherwise.
+    void fixPage(bool wasLfo){if(wasLfo)ui.page=lfoPage(ui.selectedTrack);else if(ui.page>=int(pageNames().size())||(isMidi(ui.selectedTrack)&&ui.page>1))ui.page=0;}
+    void selectTrack(int t){t=std::clamp(t,0,TrigTracks-1);const bool wasLfo=ui.page==lfoPage(ui.selectedTrack);if(t!=ui.selectedTrack)ui.latched.clear();ui.selectedTrack=t;engine.selectTrack(t);ui.stepPage=std::min(ui.stepPage,std::max(0,pages()-1));fixPage(wasLfo);}
+    void setType(int t,TrigTrackType type){const bool wasLfo=ui.page==lfoPage(t);TrigTrack config=track(t);config.type=type;engine.trigSetTrackConfig(t,config);changed();refresh();fixPage(wasLfo);}
     std::vector<std::string> pageNames()const{
-        if(isMidi(ui.selectedTrack))return {"TRIG","CC MIDI"};
+        if(isMidi(ui.selectedTrack))return {"TRIG","CC MIDI","LFO"};
         std::vector<std::string> names={"TRIG","SRC","AMP"};
         for(int slot=0;slot<InsertSlots;++slot){const auto effect=snap->edits[ui.selectedTrack].inserts[slot].effect;names.push_back("FX"+std::to_string(slot+1)+(effect==InsertEffect::None?"":" · "+std::string(insertEffectName(effect))));}
-        return names;
+        names.push_back("LFO");return names;
     }
     const TrigStep* firstLatched()const{return ui.latched.empty()?nullptr:&current().steps[size_t(ui.latched.front())];}
 
@@ -160,6 +166,16 @@ struct TrigUI::Impl {
             if(id>=TrigCcFirst&&!k.locked&&tr.ccValue[size_t(id-TrigCcFirst)]<0)k.display="—";
         };
         if(ui.page==0){field(0,Field::Note,"NOTE");field(1,Field::Velocity,"VÉLOCITÉ");field(2,Field::Length,"LONGUEUR");field(3,Field::Probability,"PROBABILITÉ");field(4,Field::Condition,"CONDITION");field(5,Field::Micro,"MICRO");field(6,Field::Retrig,"RETRIG");field(7,Field::Slide,"SLIDE");}
+        else if(ui.page==lfoPage(t)){
+            const auto& lfo=tr.lfo;const auto dests=lfoDestinations(t);int destIndex=0;for(size_t i=0;i<dests.size();++i)if(dests[i]==int(lfo.destination))destIndex=int(i);
+            auto lf=[&](int slot,int id,const std::string& label,int value,int minimum,int maximum,const std::string& text){Knob& k=result[size_t(slot)];k.kind=3;k.id=id;k.label=label;k.enabled=true;k.value=maximum>minimum?double(value-minimum)/(maximum-minimum):0;k.display=text;};
+            lf(0,0,"FORME",lfo.wave,0,LfoWaves-1,trigLfoWaveName(lfo.wave));
+            lf(1,1,"CYCLE",lfo.speed,0,TrigLfoSpeeds-1,trigLfoSpeedName(lfo.speed));
+            lf(2,2,"PROFONDEUR",lfo.depth,-100,100,(lfo.depth>0?"+":"")+std::to_string(int(lfo.depth)));
+            lf(3,3,"DESTINATION",destIndex,0,int(dests.size())-1,destIndex==0?"aucune":trigParamName(dests[size_t(destIndex)],&snap->edits[t])+(dests[size_t(destIndex)]>=TrigCcFirst?" ("+std::to_string(tr.ccNumber[size_t(dests[size_t(destIndex)]-TrigCcFirst)])+")":""));
+            lf(4,4,"MODE",lfo.mode,0,LfoModes-1,trigLfoModeName(lfo.mode));
+            Knob& out=result[5];out.kind=4;out.label="SORTIE";out.enabled=true;out.value=(snap->trigLfo[t]+1.)/2.;char text[16];std::snprintf(text,sizeof(text),"%+.2f",snap->trigLfo[t]);out.display=text;
+        }
         else if(isMidi(t)){for(int c=0;c<TrigMidiCcs;++c)param(c,TrigCcFirst+c);}
         else if(ui.page==1){param(0,TrigPitch);param(1,TrigStart);param(2,TrigEnd);param(3,TrigLevel);param(4,TrigPan);}
         else if(ui.page==2){param(0,TrigAttack);param(1,TrigDecay);param(2,TrigSustain);param(3,TrigRelease);}
@@ -170,6 +186,21 @@ struct TrigUI::Impl {
         return result;
     }
     static int fieldRange(Field f,int& minimum){switch(f){case Field::Note:minimum=0;return 127;case Field::Velocity:minimum=1;return 127;case Field::Length:minimum=1;return 64;case Field::Probability:minimum=0;return 100;case Field::Condition:minimum=0;return trigConditionCount()-1;case Field::Micro:minimum=-23;return 23;case Field::Retrig:minimum=1;return 8;case Field::Slide:minimum=0;return 1;default:minimum=0;return 1;}}
+    std::vector<int> lfoDestinations(int t)const{
+        std::vector<int> list{int(TrigLfoNone)};
+        if(isMidi(t)){for(int c=0;c<TrigMidiCcs;++c)list.push_back(TrigCcFirst+c);return list;}
+        for(int param:{int(TrigAttack),int(TrigDecay),int(TrigSustain),int(TrigRelease),int(TrigLevel),int(TrigPan)})list.push_back(param);
+        for(int slot=0;slot<InsertSlots;++slot){const auto effect=snap->edits[t].inserts[size_t(slot)].effect;const int count=std::min(6,insertParameterCount(effect));for(int p=0;p<count;++p)list.push_back(trigFxParam(slot,p));}
+        return list;
+    }
+    static int lfoRange(int id,int& minimum,int destinations){switch(id){case 0:minimum=0;return LfoWaves-1;case 1:minimum=0;return TrigLfoSpeeds-1;case 2:minimum=-100;return 100;case 3:minimum=0;return destinations-1;case 4:minimum=0;return LfoModes-1;default:minimum=0;return 0;}}
+    void setLfoField(int id,int value){
+        const int t=ui.selectedTrack;const auto dests=lfoDestinations(t);int minimum=0;const int maximum=lfoRange(id,minimum,int(dests.size()));value=std::clamp(value,minimum,maximum);
+        TrigLfo lfo=current().lfo;
+        switch(id){case 0:lfo.wave=uint8_t(value);break;case 1:lfo.speed=uint8_t(value);break;case 2:lfo.depth=int8_t(value);break;case 3:lfo.destination=uint8_t(dests[size_t(value)]);break;case 4:lfo.mode=uint8_t(value);break;default:return;}
+        engine.trigSetLfo(t,lfo);changed();refresh();
+        if(id==3||id==2)status(lfo.destination==TrigLfoNone?"LFO sans destination.":"LFO → "+trigParamName(lfo.destination,&snap->edits[t])+(lfo.depth==0?" : monte la PROFONDEUR pour l'entendre.":""));
+    }
     static double paramResolution(int id){if(id==TrigPitch)return 48;if(id>=TrigCcFirst)return 127;return 100;}
     // Sets a lockable parameter: locks on latched steps, otherwise the sound itself.
     void setParam(int t,int id,double v,bool allowLocks=true){
@@ -201,12 +232,16 @@ struct TrigUI::Impl {
     }
     void knobDelta(int index,double units){
         const auto list=knobs();if(index<0||index>=int(list.size()))return;const auto& k=list[size_t(index)];if(!k.enabled||!k.kind)return;
+        if(k.kind==4)return;
+        if(k.kind==3){int minimum=0;const int maximum=lfoRange(k.id,minimum,int(lfoDestinations(ui.selectedTrack).size()));const int value=int(std::lround(minimum+k.value*(maximum-minimum)));setLfoField(k.id,value+int(units));return;}
         if(k.kind==2){int minimum=0;const int maximum=fieldRange(Field(k.id),minimum);const int value=int(std::lround(minimum+k.value*(maximum-minimum)));setField(Field(k.id),value+int(units));}
         else setParam(ui.selectedTrack,k.id,k.value+units/paramResolution(k.id));
     }
     void knobAbsolute(int index,double start,int pixels,bool fine){
         const auto list=knobs();if(index<0||index>=int(list.size()))return;const auto& k=list[size_t(index)];if(!k.enabled||!k.kind)return;
         const double v=std::clamp(start+pixels/(fine?800.:200.),0.,1.);
+        if(k.kind==4)return;
+        if(k.kind==3){int minimum=0;const int maximum=lfoRange(k.id,minimum,int(lfoDestinations(ui.selectedTrack).size()));setLfoField(k.id,int(std::lround(minimum+v*(maximum-minimum))));return;}
         if(k.kind==2){int minimum=0;const int maximum=fieldRange(Field(k.id),minimum);setField(Field(k.id),int(std::lround(minimum+v*(maximum-minimum))));}
         else{double value=v;if(k.id==TrigPitch||k.id>=TrigCcFirst){const double r=paramResolution(k.id);value=std::round(v*r)/r;}setParam(ui.selectedTrack,k.id,value);}
     }
@@ -222,12 +257,12 @@ struct TrigUI::Impl {
     void saveSettings(){
         std::ofstream f(settingsPath().u8string(),std::ios::trunc);if(!f)return;f<<"TRIGSETTINGS 1\n";
         for(const auto& m:macros)f<<"M "<<m.track<<' '<<m.param<<' '<<m.value<<' '<<m.midiChannel<<' '<<m.midiCc<<'\n';
-        f<<"FOLLOW "<<follow<<'\n';f<<"FADER "<<faderChannel<<' '<<faderCc<<'\n';
+        f<<"PADS "<<padMode<<'\n';f<<"FOLLOW "<<follow<<'\n';f<<"FADER "<<faderChannel<<' '<<faderCc<<'\n';
     }
     void loadSettings(){
         std::ifstream f(settingsPath().u8string());std::string tag;int version=0;if(!f||!(f>>tag>>version)||tag!="TRIGSETTINGS")return;
         for(auto& m:macros){Macro parsed;if(!(f>>tag>>parsed.track>>parsed.param>>parsed.value>>parsed.midiChannel>>parsed.midiCc)||tag!="M")return;if(parsed.track>=TrigTracks||parsed.param>=TrigParamCount)parsed=Macro{};m=parsed;}
-        int value=1;if(f>>tag>>value&&tag=="FOLLOW")follow=value!=0;
+        int value=1;if(f>>tag>>value&&tag=="PADS"){padMode=value!=0;f>>tag>>value;}if(tag=="FOLLOW")follow=value!=0;
         int channel=-1,cc=-1;if(f>>tag>>channel>>cc&&tag=="FADER"){faderChannel=channel;faderCc=std::clamp(cc,-1,127);}
     }
 
@@ -276,19 +311,20 @@ struct TrigUI::Impl {
         const int choice=host.popup(items);if(choice<0)return;select(choice-1);
     }
     void settingsMenu(){
-        const int choice=host.popup({{"Sortie audio…"},{"Entrée MIDI (clavier / pads / potards)…"},{"Sortie MIDI vers Ableton…"},{"",false,true,true},{"Suivre la tête de lecture",follow}});
+        const int choice=host.popup({{"Sortie audio…"},{"Entrée MIDI (clavier / pads / potards)…"},{"Sortie MIDI vers Ableton…"},{"",false,true,true},{"Entrée MIDI : la piste sélectionnée en chromatique",!padMode},{"Entrée MIDI : pads, notes 36–51 → pistes 1–16 (MPK mini, LPD8…)",padMode},{"",false,true,true},{"Suivre la tête de lecture",follow}});
         if(choice==0){const auto outs=host.audioOutputs();std::vector<MenuItem> items{{"Sortie Windows par défaut",host.audioOutput()<0}};for(size_t i=0;i<outs.size();++i)items.push_back({outs[i],int(i)==host.audioOutput()});const int pick=host.popup(items);if(pick>=0)host.selectAudioOutput(pick-1);}
         else if(choice==1)deviceMenu(host.midiInputs(),host.midiInput(),"Aucune entrée MIDI",[&](int i){host.selectMidiInput(i);});
         else if(choice==2)deviceMenu(host.midiOutputs(),host.midiOutput(),"Aucune sortie MIDI",[&](int i){host.selectMidiOutput(i);});
-        else if(choice==4){follow=!follow;saveSettings();}
+        else if(choice==4||choice==5){padMode=choice==5;saveSettings();status(padMode?"Mode pads : notes 36 à 51 → pistes 1 à 16.":"Mode chromatique : ton clavier joue la piste sélectionnée.");}
+        else if(choice==7){follow=!follow;saveSettings();}
     }
     void trackMenu(int t){
         selectTrack(t);const bool midi=isMidi(t);const auto& seq=snap->sequences[snap->sequence];
         const int choice=host.popup({{"Piste SON (sample)",!midi},{"Piste MIDI (vers Ableton)",midi},{"",false,true,true},{"Charger un sample…",false,!midi},{"Canal MIDI…",false,midi},{"",false,true,true},{"Muet",seq.tracks[t].mute},{"Solo",seq.tracks[t].solo},{"",false,true,true},{"Copier la piste"},{"Coller la piste",false,trackClipboard!=nullptr},{"Effacer les pas de la piste"}});
         TrigTrack config=current();
         switch(choice){
-        case 0:config.type=TrigTrackType::Audio;engine.trigSetTrackConfig(t,config);changed();break;
-        case 1:config.type=TrigTrackType::Midi;engine.trigSetTrackConfig(t,config);if(ui.page>1)ui.page=0;changed();status("Piste "+std::to_string(t+1)+" en MIDI : choisis la sortie MIDI dans Réglages (loopMIDI pour Ableton).");break;
+        case 0:setType(t,TrigTrackType::Audio);break;
+        case 1:setType(t,TrigTrackType::Midi);status("Piste "+std::to_string(t+1)+" en MIDI : choisis la sortie MIDI dans Réglages (loopMIDI pour Ableton).");break;
         case 3:loadSample(t);break;
         case 4:channelMenu(t);break;
         case 6:engine.setTrackMute(t,!seq.tracks[t].mute);changed();break;
@@ -391,7 +427,7 @@ struct TrigUI::Impl {
         p.text(r.x+6,r.y+10,r.w-12,20,k.label,13,k.enabled?(marked?mark:Muted):Dim,Align::Center,true);
         const bool large=r.h>180;const int cx=r.x+r.w/2,cy=r.y+(large?92:70),radius=large?42:32;
         p.arc(cx,cy,radius,135,270,Line,8);
-        if(k.enabled){const Color c=marked?mark:(ui.page==0?Yellow:Blue);p.arc(cx,cy,radius,135,std::max(1.,270*k.value),c,8);
+        if(k.enabled){const Color c=marked?mark:(ui.page==0?Yellow:(k.kind>=3?Orange:Blue));p.arc(cx,cy,radius,135,std::max(1.,270*k.value),c,8);
             const double angle=(135+270*k.value)*3.14159265/180.;p.line(cx,cy,cx+int(std::cos(angle)*(radius-14)),cy+int(std::sin(angle)*(radius-14)),Ink,3);}
         p.disc(cx,cy,7,k.enabled?Ink:Dim);
         p.text(r.x+4,r.y+r.h-(large?50:44),r.w-8,24,k.display,large?16:14,k.enabled?Ink:Dim,Align::Center,true);
@@ -528,13 +564,14 @@ struct TrigUI::Impl {
         // Tabs
         const auto names=pageNames();int tabX=MainX;
         for(int i=0;i<int(names.size());++i){const int w=i==0?92:(i<3?86:(names[size_t(i)].size()>4?150:86));const Rect r{tabX,TabY,w,TabH};button(p,r,names[size_t(i)],ui.page==i,i==0?Yellow:Blue,12);tabX+=w+6;}
-        if(!isMidi(sel)&&ui.page>=3){const int slot=ui.page-3;const auto& insert=snap->edits[sel].inserts[size_t(slot)];
+        if(fxPage()){const int slot=ui.page-3;const auto& insert=snap->edits[sel].inserts[size_t(slot)];
             const Rect fx{std::max(tabX+10,FxEffect.x),FxEffect.y,FxEffect.w-(std::max(tabX+10,FxEffect.x)-FxEffect.x),FxEffect.h};
             button(p,fx,insert.effect==InsertEffect::None?"Choisir un effet…":std::string("Effet : ")+insertEffectName(insert.effect)+" ▾",false,Blue,12);
             button(p,FxBypass,insert.bypass?"BYPASS":"ACTIF",!insert.bypass,Green,12);}
         // Knobs
         const auto list=knobs();for(int i=0;i<8;++i)drawKnob(p,knobRect(i),list[size_t(i)],dragKnob==i||knobRect(i).in(mouseX,mouseY));
-        if(ui.page==0&&ui.latched.empty())p.text(MainX,KnobY+KnobH+2,MainW,16,"Sans sélection : NOTE, VÉLOCITÉ et LONGUEUR sont les valeurs des nouveaux trigs de la piste. Sélectionne un pas pour régler sa probabilité, sa condition, son micro-timing et son retrig.",10,Muted,Align::Left);
+        if(ui.page==lfoPage(sel))p.text(MainX,KnobY+KnobH+2,MainW,16,"LFO : FORME et CYCLE (en pas de la piste) · PROFONDEUR ± autour de la valeur · MODE LIBRE / TRIG (repart à chaque trig) / UNE FOIS (enveloppe)",10,Muted,Align::Left);
+        else if(ui.page==0&&ui.latched.empty())p.text(MainX,KnobY+KnobH+2,MainW,16,"Sans sélection : NOTE, VÉLOCITÉ et LONGUEUR sont les valeurs des nouveaux trigs de la piste. Sélectionne un pas pour régler sa probabilité, sa condition, son micro-timing et son retrig.",10,Muted,Align::Left);
         else if(ui.page==0)p.text(MainX,KnobY+KnobH+2,MainW,16,"CONDITION : 1:4 = joue au 1er passage sur 4 · FILL = seulement avec FILL · PRE/NEI = selon le trig précédent / la piste voisine · 1ST = premier passage",10,Muted,Align::Left);
         // Macros / scenes
         button(p,ViewMacros,"MACROS",!sceneView,Blue,12);button(p,ViewScenes,"SCÈNES",sceneView,Green,12);
@@ -591,7 +628,7 @@ struct TrigUI::Impl {
             if(trackPlay(t).in(x,y)){engine.trigPlayLive(t,-1,track(t).defaultVelocity,true,record&&snap->playing);engine.trigPlayLive(t,-1,0,false,false);if(record&&snap->playing)changed();}
             refresh();return;
         }
-        if(TrackType.in(x,y)){TrigTrack config=current();config.type=x<TrackType.x+TrackType.w/2?TrigTrackType::Audio:TrigTrackType::Midi;engine.trigSetTrackConfig(sel,config);if(isMidi(sel)&&ui.page>1)ui.page=0;changed();refresh();if(config.type==TrigTrackType::Midi&&ui.page>1)ui.page=0;return;}
+        if(TrackType.in(x,y)){setType(sel,x<TrackType.x+TrackType.w/2?TrigTrackType::Audio:TrigTrackType::Midi);return;}
         if(TrackLength.in(x,y)){if(right)lengthMenu();else{dragHeader=3;dragStart=current().length;dragStartY=y;}return;}
         if(TrackSpeed.in(x,y)){speedMenu();return;}
         if(isMidi(sel)&&TrackChannel.in(x,y)){channelMenu(sel);return;}
@@ -616,7 +653,7 @@ struct TrigUI::Impl {
         if(!ui.latched.empty()&&LatchPaste.in(x,y)){pasteSteps();return;}
         if(!ui.latched.empty()&&LatchRelease.in(x,y)){ui.latched.clear();status("Sélection relâchée.");return;}
         const int tab=tabAt(x,y);if(tab>=0){ui.page=tab;return;}
-        if(!isMidi(sel)&&ui.page>=3){const int slot=ui.page-3;if(FxBypass.in(x,y)){engine.setInsertBypass(sel,slot,!snap->edits[sel].inserts[size_t(slot)].bypass);changed();refresh();return;}if(FxEffect.in(x,y)||(y>=TabY&&y<TabY+TabH&&x>FxEffect.x-200&&x<FxBypass.x)){effectMenu(slot);return;}}
+        if(fxPage()){const int slot=ui.page-3;if(FxBypass.in(x,y)){engine.setInsertBypass(sel,slot,!snap->edits[sel].inserts[size_t(slot)].bypass);changed();refresh();return;}if(FxEffect.in(x,y)||(y>=TabY&&y<TabY+TabH&&x>FxEffect.x-200&&x<FxBypass.x)){effectMenu(slot);return;}}
         for(int i=0;i<8;++i){
             const auto r=knobRect(i);if(!r.in(x,y))continue;const auto list=knobs();const auto& k=list[size_t(i)];if(!k.kind||!k.enabled)return;
             if(right){
@@ -704,6 +741,7 @@ struct TrigUI::Impl {
         }
         if(type==0x90||type==0x80){
             refresh();const bool pressed=type==0x90&&data2>0;const bool rec=record&&snap->playing;
+            if(padMode&&data1>=36&&data1<36+TrigTracks){const int t=data1-36;engine.trigPlayLive(t,-1,pressed?data2:64,pressed,rec);if(pressed&&rec)changed();return;}
             engine.trigPlayLive(ui.selectedTrack,data1,pressed?data2:64,pressed,rec);if(pressed&&rec)changed();
         }
     }

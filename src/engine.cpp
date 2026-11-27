@@ -253,6 +253,7 @@ struct Engine::Impl {
     std::array<double,Pads> livePan{};
     std::array<std::array<std::array<int,6>,InsertSlots>,Pads> liveFx{};
     std::array<std::array<double,TrigParamCount>,TrigTracks> sceneValue{};
+    std::array<double,TrigTracks> lfoPhase{},lfoHold{};std::array<bool,TrigTracks> lfoDone{};uint32_t lfoRandom=0x5eed1234u;
     void trigLive();
     void addGlide(int track,int param,double from,double to,double samples);
     double sceneOverride(int track,int param)const{return sceneValue[size_t(track)][size_t(param)];}
@@ -640,7 +641,7 @@ Snapshot Engine::snapshot(){
     Snapshot result;
     {std::lock_guard<std::mutex> lock(impl->mutex);const auto& state=impl->state;result.active=state.active;result.edits=state.edits;result.progress=state.progress;result.sequences=state.sequences;result.programs=state.programs;result.song=state.song;
      result.tempo=state.tempo;result.volume=state.volume;result.playing=state.playing;result.songPlaying=state.songPlaying;result.noteRepeat=state.noteRepeat;result.arpeggiator=state.arpeggiator;result.repeatDivision=state.repeatDivision;result.step=state.step;result.playBar=state.playBar;result.viewBar=state.viewBar;result.sequence=state.sequence;result.queuedSequence=state.queuedSequence;result.group=state.group;result.queuedGroup=state.queuedGroup;result.program=state.program;result.queuedProgram=state.queuedProgram;result.selectedTrack=state.selectedTrack;result.songLength=state.songLength;result.songPosition=state.songPosition;result.songRepeat=state.songRepeat;result.mixPeak=state.mixPeak;result.peak=state.peak;result.preLimiterPeak=state.preLimiterPeak;result.limiterReductionDb=state.limiterReductionDb;result.trackPeaks=state.trackPeaks;
-     result.trigPlayStep=state.trigPlayStep;result.trigFlash=state.trigFlash;result.fill=state.fill;result.midiClockOut=state.midiClockOut;result.crossfader=state.crossfader;
+     result.trigPlayStep=state.trigPlayStep;result.trigFlash=state.trigFlash;result.fill=state.fill;result.midiClockOut=state.midiClockOut;result.crossfader=state.crossfader;result.trigLfo=state.trigLfo;
      const auto& sequence=state.sequences[state.sequence];const int first=state.viewBar*Steps;result.melody.fill(-1);for(int p=0;p<Pads;++p)for(int step=0;step<Steps;++step)result.pattern[p][step]=sequence.drum[p][first+step];for(int step=0;step<Steps;++step)result.melody[step]=sequence.melody[first+step];}
     {std::lock_guard<std::mutex> lock(impl->metadataMutex);for(int pad=0;pad<Pads;++pad){const auto& bank=impl->banks[result.program][pad];const auto& primary=bank.layers[0];result.names[pad]=primary.name;result.paths[pad]=primary.path;result.waveforms[pad]=primary.waveform;result.durations[pad]=primary.duration;for(int layer=0;layer<PadLayers;++layer){const auto& source=bank.layers[layer];result.layers[pad][layer]={source.name,source.path,source.duration,source.velocityStart,source.velocityEnd,source.reverse,source.loaded};}}}
     return result;

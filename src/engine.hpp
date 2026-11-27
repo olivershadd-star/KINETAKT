@@ -162,7 +162,18 @@ struct TrigStep {
 constexpr int TrigSpeeds=5;
 double trigSpeedFactor(int speed);
 const char* trigSpeedName(int speed);
+// One LFO per track. Its output is added to a destination parameter live.
+enum TrigLfoWave : uint8_t { LfoSine=0, LfoTriangle, LfoSawUp, LfoSawDown, LfoSquare, LfoRandom, LfoWaves };
+enum TrigLfoMode : uint8_t { LfoFree=0, LfoTrig, LfoOneShot, LfoModes };
+constexpr int TrigLfoSpeeds=10;
+double trigLfoCycleSteps(int speed);      // length of one LFO cycle in track steps
+const char* trigLfoSpeedName(int speed);
+const char* trigLfoWaveName(int wave);
+const char* trigLfoModeName(int mode);
+constexpr uint8_t TrigLfoNone=255;
+struct TrigLfo { uint8_t wave=LfoSine, speed=5, mode=LfoFree, destination=TrigLfoNone; int8_t depth=0; };
 struct TrigTrack {
+    TrigLfo lfo{};
     TrigTrackType type=TrigTrackType::Audio;
     uint8_t length=16;       // 1–64 steps
     uint8_t speed=1;         // index for trigSpeedFactor
@@ -256,6 +267,7 @@ struct Snapshot {
     std::array<bool,TrigTracks> trigFlash{};
     bool fill=false,midiClockOut=true;
     double crossfader=0;      // 0 = scene A, 1 = scene B
+    std::array<double,TrigTracks> trigLfo{};   // current LFO outputs (−1..1), for display
 };
 class Engine {
 public:
@@ -387,6 +399,7 @@ public:
     void trigClearScene(int scene);
     void trigSetSceneAB(int a,int b);
     void setCrossfader(double position);
+    void trigSetLfo(int track,const TrigLfo& lfo);
 private:
     bool openKick(const std::string&,std::string& error);
     struct Impl; std::unique_ptr<Impl> impl;

@@ -131,6 +131,20 @@ int main(int argc,char** argv){
      check(p.tracks[1].steps[3].slide,"slide restored");check(p.sceneA==5&&p.sceneB==9,"scene A/B restored");
      const int at=p.scenes[5].find(7,TrigDecay);check(at>=0&&p.scenes[5].locks[size_t(at)].value==250,"scene value restored");
      TrigPattern empty;f->trigSetPattern(0,empty);s=std::make_unique<Snapshot>(f->snapshot());check(!s->sequences[0].trig.tracks[1].steps[3].slide&&s->sequences[0].trig.scenes[5].count==0,"pattern replaced");}
+    // 13. v0.3 — LFO: a square LFO on CC 1 alternates high/low every half cycle; saved and reloaded.
+    {Rig r;auto t=midiTrack(0);t.ccNumber[0]=21;t.ccValue[0]=64;r.engine->trigSetTrackConfig(0,t);
+     TrigLfo lfo;lfo.wave=LfoSquare;lfo.speed=2;lfo.depth=100;lfo.destination=TrigCcFirst;lfo.mode=LfoTrig;r.engine->trigSetLfo(0,lfo); // 2-step cycle
+     r.engine->trigToggle(0,0);r.engine->setPlaying(true);r.run(int(4*sf/Block));
+     std::vector<int> values;for(auto& e:r.midi)if((e.message&0xF0)==0xB0&&((e.message>>8)&127)==21)values.push_back(int((e.message>>16)&127));
+     int high=0,low=0;for(int v:values){if(v>=126)++high;if(v<=1)++low;}
+     check(high>=2&&low>=2,"square LFO swings CC between 127 and 0 ("+std::to_string(high)+"/"+std::to_string(low)+")");
+     std::string error;const auto file=(dir/"lfo.elektakt").u8string();check(r.engine->save(file,error),"lfo save");
+     auto f=std::make_unique<Engine>();check(f->open(file,error)&&error.empty(),"lfo open: "+error);auto snap=std::make_unique<Snapshot>(f->snapshot());const auto& l=snap->sequences[0].trig.tracks[0].lfo;
+     check(l.wave==LfoSquare&&l.speed==2&&l.depth==100&&l.destination==TrigCcFirst&&l.mode==LfoTrig,"LFO restored");}
+    // 14. v0.3 — LFO on an audio track's LEVEL modulates the output.
+    {Rig r;std::string error;check(r.engine->load(0,sample,error),"lfo sample");TrigLfo lfo;lfo.wave=LfoSquare;lfo.speed=0;lfo.depth=-100;lfo.destination=TrigLevel;r.engine->trigSetLfo(0,lfo);
+     auto s=std::make_unique<Snapshot>(r.engine->snapshot());check(s->sequences[0].trig.tracks[0].lfo.destination==TrigLevel,"audio LFO set");
+     r.engine->trigToggle(0,0);r.engine->setPlaying(true);r.run(int(2*sf/Block));s=std::make_unique<Snapshot>(r.engine->snapshot());check(std::abs(s->trigLfo[0])>.99,"LFO output visible");}
     // 12. Live state reaches the interface snapshot (playheads, fill, clock, crossfader).
     {Rig r;auto t=midiTrack(0);t.length=4;r.engine->trigSetTrackConfig(0,t);r.engine->setFill(true);r.engine->setMidiClockOut(false);r.engine->setCrossfader(.3);
      r.engine->setPlaying(true);r.run(int(2.5*sf/Block));auto s=std::make_unique<Snapshot>(r.engine->snapshot());

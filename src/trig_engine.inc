@@ -19,6 +19,10 @@ std::string trigConditionName(int code){
     int a=0,b=0;if(trigConditionCycle(code,a,b))return std::to_string(a)+":"+std::to_string(b);
     return "—";
 }
+double trigLfoCycleSteps(int speed){static const double steps[TrigLfoSpeeds]={.5,1,2,4,8,16,32,64,128,256};return steps[std::clamp(speed,0,TrigLfoSpeeds-1)];}
+const char* trigLfoSpeedName(int speed){static const char* names[TrigLfoSpeeds]={"1/2 pas","1 pas","2 pas","4 pas","8 pas","16 pas","32 pas","64 pas","128 pas","256 pas"};return names[std::clamp(speed,0,TrigLfoSpeeds-1)];}
+const char* trigLfoWaveName(int wave){static const char* names[LfoWaves]={"SINUS","TRIANGLE","RAMPE +","RAMPE −","CARRÉ","ALÉATOIRE"};return names[std::clamp(wave,0,LfoWaves-1)];}
+const char* trigLfoModeName(int mode){static const char* names[LfoModes]={"LIBRE","TRIG","UNE FOIS"};return names[std::clamp(mode,0,LfoModes-1)];}
 double trigSpeedFactor(int speed){static const double factors[TrigSpeeds]={2.,1.,.5,.25,.125};return factors[std::clamp(speed,0,TrigSpeeds-1)];}
 const char* trigSpeedName(int speed){static const char* names[TrigSpeeds]={"2x","1x","1/2x","1/4x","1/8x"};return names[std::clamp(speed,0,TrigSpeeds-1)];}
 
@@ -163,6 +167,7 @@ void Engine::Impl::trigFire(int t,const TrigTrack& tr,const TrigStep& st,long lo
     if(conditional)trigLastCond[t]=pass;
     if(!pass||muted)return;
     trigFlashBlocks[t]=8;glideCount[size_t(t)]=0;startSlides();
+    if(tr.lfo.mode!=LfoFree){lfoPhase[size_t(t)]=0;lfoDone[size_t(t)]=false;}
     const int velocity=std::clamp(int(st.velocity),1,127);const int hits=std::clamp(int(st.retrig),1,8);
     if(tr.type==TrigTrackType::Midi){
         const int channel=tr.midiChannel&15;const int note=std::clamp(st.note>=0?int(st.note):int(tr.defaultNote),0,127);
@@ -260,20 +265,39 @@ void Engine::Impl::trigLive(){
         std::array<double,TrigParamCount> glideValue;glideValue.fill(std::numeric_limits<double>::quiet_NaN());
         auto& g=glides[size_t(t)];int& n=glideCount[size_t(t)];
         for(int i=0;i<n;++i){auto& e=g[size_t(i)];const double r=std::min(1.,e.elapsed/e.total);glideValue[e.param]=e.from+(e.to-e.from)*r;if(s.playing)e.elapsed+=Block;if(r>=1.){e=g[size_t(n-1)];--n;--i;}}
-        auto value=[&](int param){const double v=sceneValue[size_t(t)][size_t(param)];return std::isnan(v)?glideValue[size_t(param)]:v;};
+        auto sceneOrGlide=[&](int param){const double v=sceneValue[size_t(t)][size_t(param)];return std::isnan(v)?glideValue[size_t(param)]:v;};
         const auto& tr=pattern.tracks[size_t(t)];
+        // LFO: advances with the track clock, its output is added to one parameter.
+        const auto& lfo=tr.lfo;double lfoOut=0;
+        {
+            const double cycle=trigLfoCycleSteps(lfo.speed);const double advance=Block/samplesPerStep*trigSpeedFactor(tr.speed)/cycle;
+            double& phase=lfoPhase[size_t(t)];
+            if(lfo.mode==LfoOneShot&&lfoDone[size_t(t)])phase=1.;
+            else{phase+=advance;if(phase>=1.){if(lfo.mode==LfoOneShot){phase=1.;lfoDone[size_t(t)]=true;}else{phase-=std::floor(phase);lfoRandom=lfoRandom*1664525u+1013904223u;lfoHold[size_t(t)]=((lfoRandom>>8)&0xffff)/32767.5-1.;}}}
+            const double p=std::clamp(phase,0.,1.);double w=0;
+            switch(lfo.wave){case LfoSine:w=std::sin(p*6.283185307179586);break;case LfoTriangle:w=1.-4.*std::abs(p-.5);break;case LfoSawUp:w=2.*p-1.;break;case LfoSawDown:w=1.-2.*p;break;case LfoSquare:w=p<.5?1.:-1.;break;default:w=lfoHold[size_t(t)];break;}
+            lfoOut=w*std::clamp(int(lfo.depth),-100,100)/100.;s.trigLfo[t]=lfoOut;
+        }
+        const int lfoTarget=lfo.depth!=0?int(lfo.destination):-1;
+        // Value of a parameter: scene > slide, plus the LFO around it (base when nothing else).
+        auto value=[&](int param,double base)->double{
+            const double v=sceneOrGlide(param);if(param!=lfoTarget)return v;
+            return std::clamp((std::isnan(v)?base:v)+lfoOut*.5,0.,1.);
+        };
         if(tr.type==TrigTrackType::Midi){
-            for(int c=0;c<TrigMidiCcs;++c){const double v=value(TrigCcFirst+c);if(std::isnan(v))continue;const int cc=std::clamp(int(std::lround(v*127.)),0,127);
+            for(int c=0;c<TrigMidiCcs;++c){
+                const int param=TrigCcFirst+c;if(param==lfoTarget&&!s.playing&&std::isnan(sceneOrGlide(param)))continue; // the LFO only sends CCs while playing
+                const double v=value(param,tr.ccValue[size_t(c)]<0?.5:tr.ccValue[size_t(c)]/127.);if(std::isnan(v))continue;const int cc=std::clamp(int(std::lround(v*127.)),0,127);
                 if(cc!=trigSentCc[t][c]){pushMidi(frames,uint32_t(0xB0|(tr.midiChannel&15))|(uint32_t(tr.ccNumber[size_t(c)]&127)<<8)|(uint32_t(cc)<<16));trigSentCc[t][c]=cc;}}
             continue;
         }
         // Audio: live parameters (envelope, level), pan and effects.
-        bool any=false;PadEdit edit=trigEditValid[t]?trigEdit[t]:banks[s.program][t].edit;
-        for(int param:{int(TrigAttack),int(TrigDecay),int(TrigSustain),int(TrigRelease),int(TrigLevel)}){const double v=value(param);if(!std::isnan(v)){trigParamApply(edit,param,v);any=true;}}
+        bool any=false;PadEdit edit=trigEditValid[t]?trigEdit[t]:banks[s.program][t].edit;const PadEdit& bank=banks[s.program][t].edit;
+        for(int param:{int(TrigAttack),int(TrigDecay),int(TrigSustain),int(TrigRelease),int(TrigLevel)}){const double v=value(param,trigParamBase(edit,param));if(!std::isnan(v)){trigParamApply(edit,param,v);any=true;}}
         if(any){edit.semitones=players[t]->edit.semitones;edit.start=players[t]->edit.start;edit.end=players[t]->edit.end;players[t]->edit=edit;liveTouched[t]=true;}
         else if(liveTouched[t]){edit.semitones=players[t]->edit.semitones;edit.start=players[t]->edit.start;edit.end=players[t]->edit.end;players[t]->edit=edit;liveTouched[t]=false;}
-        const double pan=value(TrigPan);livePan[t]=std::isnan(pan)?std::numeric_limits<double>::quiet_NaN():pan*2.-1.;
-        for(int slot=0;slot<InsertSlots;++slot)for(int p=0;p<6;++p){const double v=value(trigFxParam(slot,p));liveFx[t][size_t(slot)][size_t(p)]=std::isnan(v)?-1:int(std::lround(v*TrigLockResolution));}
+        const double pan=value(TrigPan,std::isnan(lockedPan[t])?(bank.pan+1.)/2.:(lockedPan[t]+1.)/2.);livePan[t]=std::isnan(pan)?std::numeric_limits<double>::quiet_NaN():pan*2.-1.;
+        for(int slot=0;slot<InsertSlots;++slot)for(int p=0;p<6;++p){const int locked=lockedFx[t][size_t(slot)][size_t(p)];const double v=value(trigFxParam(slot,p),locked>=0?locked/double(TrigLockResolution):bank.inserts[size_t(slot)].parameters[size_t(p)]);liveFx[t][size_t(slot)][size_t(p)]=std::isnan(v)?-1:int(std::lround(v*TrigLockResolution));}
     }
 }
 
@@ -360,6 +384,11 @@ void Engine::trigClearSceneValue(int scene,int track,int param){
 void Engine::trigClearScene(int scene){if(scene<0||scene>=TrigScenes)return;std::lock_guard<std::mutex> lock(impl->mutex);impl->state.sequences[impl->state.sequence].trig.scenes[size_t(scene)]=TrigScene{};}
 void Engine::trigSetSceneAB(int a,int b){std::lock_guard<std::mutex> lock(impl->mutex);auto& p=impl->state.sequences[impl->state.sequence].trig;p.sceneA=std::clamp(a,0,TrigScenes-1);p.sceneB=std::clamp(b,0,TrigScenes-1);}
 void Engine::setCrossfader(double position){std::lock_guard<std::mutex> lock(impl->mutex);impl->state.crossfader=std::clamp(std::isfinite(position)?position:0.,0.,1.);}
+void Engine::trigSetLfo(int track,const TrigLfo& requested){
+    if(track<0||track>=TrigTracks)return;TrigLfo lfo=requested;lfo.wave=uint8_t(std::min<int>(lfo.wave,LfoWaves-1));lfo.speed=uint8_t(std::min<int>(lfo.speed,TrigLfoSpeeds-1));lfo.mode=uint8_t(std::min<int>(lfo.mode,LfoModes-1));
+    if(lfo.destination!=TrigLfoNone&&lfo.destination>=TrigParamCount)lfo.destination=TrigLfoNone;lfo.depth=int8_t(std::clamp(int(lfo.depth),-100,100));
+    std::lock_guard<std::mutex> lock(impl->mutex);impl->state.sequences[impl->state.sequence].trig.tracks[size_t(track)].lfo=lfo;
+}
 void Engine::setFill(bool active){std::lock_guard<std::mutex> lock(impl->mutex);impl->state.fill=active;}
 void Engine::setMidiClockOut(bool enabled){std::lock_guard<std::mutex> lock(impl->mutex);impl->state.midiClockOut=enabled;}
 void Engine::sendMidi(uint32_t message){impl->pushMidi(0,message);}
@@ -407,14 +436,15 @@ void Engine::trigImportKickSteps(){
 // ---------------------------------------------------------------- persistence
 namespace {
 void writeTrigSection(std::ostream& f,const Snapshot& s){
-    f<<"TRIGDATA 2 "<<Sequences<<'\n';
+    f<<"TRIGDATA 3 "<<Sequences<<'\n';
     for(int index=0;index<Sequences;++index){
         const auto& pattern=s.sequences[index].trig;
         f<<"TP "<<index<<' '<<pattern.masterLength<<' '<<pattern.swing<<' '<<pattern.sceneA<<' '<<pattern.sceneB<<'\n';
         for(int t=0;t<TrigTracks;++t){
             const auto& tr=pattern.tracks[t];
             f<<"TT "<<t<<' '<<int(tr.type)<<' '<<int(tr.length)<<' '<<int(tr.speed)<<' '<<int(tr.midiChannel)<<' '<<int(tr.defaultNote)<<' '<<int(tr.defaultVelocity)<<' '<<int(tr.defaultLength);
-            for(int c=0;c<TrigMidiCcs;++c)f<<' '<<int(tr.ccNumber[c])<<' '<<tr.ccValue[c];f<<'\n';
+            for(int c=0;c<TrigMidiCcs;++c)f<<' '<<int(tr.ccNumber[c])<<' '<<tr.ccValue[c];
+            f<<' '<<int(tr.lfo.wave)<<' '<<int(tr.lfo.speed)<<' '<<int(tr.lfo.mode)<<' '<<int(tr.lfo.destination)<<' '<<int(tr.lfo.depth)<<'\n';
             for(int i=0;i<TrigMaxSteps;++i){
                 const auto& st=tr.steps[size_t(i)];if(st.empty())continue;
                 f<<"TS "<<i<<' '<<st.trig<<' '<<int(st.note)<<' '<<int(st.velocity)<<' '<<int(st.length)<<' '<<int(st.probability)<<' '<<int(st.condition)<<' '<<int(st.micro)<<' '<<int(st.retrig)<<' '<<int(st.slide)<<' '<<int(st.lockCount);
@@ -429,7 +459,7 @@ void writeTrigSection(std::ostream& f,const Snapshot& s){
     f<<"TRIGEND\n";
 }
 bool readTrigSection(std::istream& f,std::array<TrigPattern,Sequences>& patterns){
-    std::string tag;int version=0,count=0;if(!(f>>tag>>version>>count)||tag!="TRIGDATA"||version<1||version>2||count!=Sequences)return false;
+    std::string tag;int version=0,count=0;if(!(f>>tag>>version>>count)||tag!="TRIGDATA"||version<1||version>3||count!=Sequences)return false;
     for(int index=0;index<Sequences;++index){
         int parsed=-1;auto& pattern=patterns[index];pattern=TrigPattern{};
         if(!(f>>tag>>parsed>>pattern.masterLength>>pattern.swing)||tag!="TP"||parsed!=index)return false;
@@ -441,6 +471,9 @@ bool readTrigSection(std::istream& f,std::array<TrigPattern,Sequences>& patterns
             tr.type=type==1?TrigTrackType::Midi:TrigTrackType::Audio;tr.length=uint8_t(std::clamp(length,1,TrigMaxSteps));tr.speed=uint8_t(std::clamp(speed,0,TrigSpeeds-1));tr.midiChannel=uint8_t(channel&15);
             tr.defaultNote=uint8_t(std::clamp(note,0,127));tr.defaultVelocity=uint8_t(std::clamp(velocity,1,127));tr.defaultLength=uint8_t(std::clamp(gate,1,TrigMaxSteps));
             for(int c=0;c<TrigMidiCcs;++c){int number=0,value=-1;if(!(f>>number>>value))return false;tr.ccNumber[c]=uint8_t(number&127);tr.ccValue[c]=int16_t(std::clamp(value,-1,127));}
+            if(version>=3){int wave=0,speed=5,mode=0,destination=TrigLfoNone,depth=0;if(!(f>>wave>>speed>>mode>>destination>>depth))return false;
+                tr.lfo.wave=uint8_t(std::clamp(wave,0,LfoWaves-1));tr.lfo.speed=uint8_t(std::clamp(speed,0,TrigLfoSpeeds-1));tr.lfo.mode=uint8_t(std::clamp(mode,0,LfoModes-1));
+                tr.lfo.destination=uint8_t(destination>=0&&destination<TrigParamCount?destination:TrigLfoNone);tr.lfo.depth=int8_t(std::clamp(depth,-100,100));}
             while(f>>tag&&tag=="TS"){
                 int step=0,trig=0,stepNote=-1,stepVelocity=100,stepLength=1,probability=100,condition=0,micro=0,retrig=1,slide=0,locks=0;
                 if(!(f>>step>>trig>>stepNote>>stepVelocity>>stepLength>>probability>>condition>>micro>>retrig)||(version>=2&&!(f>>slide))||!(f>>locks)||step<0||step>=TrigMaxSteps||locks<0||locks>TrigLocksPerStep)return false;

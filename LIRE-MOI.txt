@@ -13,6 +13,8 @@ DÉMARRER
 8. SLIDE (page TRIG) : les valeurs verrouillées d'un pas glissent jusqu'au lock suivant.
 9. SCÈNES (en bas) : clic sur une scène pour l'éditer, clic droit pour la mettre en A ou B,
    puis le crossfader passe de A à B (assignable à un potard MIDI par clic droit).
+10. LFO (dernière page de potards) : choisis une DESTINATION puis monte la PROFONDEUR.
+11. RÉGLAGES > Entrée MIDI : pads → les pads 36–51 de ton MPK mini jouent les pistes 1–16.
 
 ENVOYER LE MIDI VERS ABLETON (pistes MIDI + horloge)
 1. Installe loopMIDI (gratuit) : https://www.tobias-erichsen.de/software/loopmidi.html

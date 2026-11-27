@@ -86,6 +86,13 @@ int main(int argc,char** argv){
     ui.mouseDown(376+90+400,784,0,0);std::cout<<"fader click: "<<ui.status<<"\n";ui.mouseUp(0,0,0);                                   // crossfader
     s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"scene2 values="<<int(s->sequences[0].trig.scenes[1].count)<<" fader="<<s->crossfader<<"\n";
     shot(ui,"ui-8-scenes.png");
+    // v0.3: LFO page on track 3 → DECAY, depth 60, then play.
+    ui.key(KeyEscape,true,0);ui.mouseDown(376+20,670,0,0);ui.mouseUp(0,0,0);
+    ui.mouseDown(100,124+2*46+20,0,0);ui.mouseUp(0,0,0);ui.page=7;
+    ui.wheel(376+3*151+60,520,2,0);ui.wheel(376+2*151+60,520,60,0);ui.wheel(376+0*151+60,520,1,0);ui.wheel(376+1*151+60,520,-2,0);
+    for(int b=0;b<200;++b)engine->render(block);ui.tick();
+    s=std::make_unique<lab::Snapshot>(engine->snapshot());const auto& lf=s->sequences[0].trig.tracks[2].lfo;std::cout<<"lfo dest="<<int(lf.destination)<<" depth="<<int(lf.depth)<<" wave="<<int(lf.wave)<<" out="<<s->trigLfo[2]<<"\n";
+    shot(ui,"ui-9-lfo.png");
     std::cout<<"status: "<<ui.status<<"\n";
     return 0;
 }
