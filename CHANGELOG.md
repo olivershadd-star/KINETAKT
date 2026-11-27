@@ -1,5 +1,10 @@
 # ELEKTAKT — versions
 
+## 0.5.0
+- **Navigateur SONS** : kit démo, dossier `samples` ou un dossier de ton choix (mémorisé), écoute au clic, chargement au double-clic.
+- **Rééchantillonnage** : le pattern (1 à 8 cycles) devient un WAV dans `samples` et se charge sur la piste choisie.
+- **Découpage (chop)** : 8, 16 ou 32 tranches d'un sample posées sur les pas avec des locks START / END, dans l'ordre ou au hasard.
+
 ## 0.4.0
 - **GÉNÉRER ▾** par piste : euclidien (3–11 coups), aléatoire 25/50/75 %, mutation de 20 % des pas, vélocités au hasard, « accidents » (probabilités, cycles, retrigs, micro-décalages), locks au hasard sur le dernier potard touché, hauteurs au hasard en gamme mineure, décalage d'un pas, inversion. Tout s'annule avec Ctrl+Z.
 - **Export des stems** : le mix et un WAV par piste son, de même durée.

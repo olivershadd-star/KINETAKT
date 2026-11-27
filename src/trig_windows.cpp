@@ -269,8 +269,9 @@ public:
         case 7:ui->page=2;ui->wheel(376+151+40,500,-5,0);click(376+90+400,784);break; // scene value + crossfader
         case 8:ui->key('Z',true,trig::ModControl);ui->key('Y',true,trig::ModControl);break; // undo / redo
         case 9:click(100,124+2*46+20);ui->page=7;ui->wheel(376+3*151+60,520,2,0);ui->wheel(376+2*151+60,520,40,0);ui->key(trig::KeySpace,true,0);break; // LFO page, stop
-        case 10:click(100,124+5*46+20);ui->page=0;break; // track 6
-        case 11:InvalidateRect(window,nullptr,FALSE);break;
+        case 10:click(100,124+5*46+20);ui->page=0;click(1400,90);click(600,226+40);break; // track 6, sound browser, preview
+        case 11:ui->key(trig::KeyEscape,true,0);break;
+        case 12:InvalidateRect(window,nullptr,FALSE);break;
         default:DestroyWindow(window);break;
         }
     }

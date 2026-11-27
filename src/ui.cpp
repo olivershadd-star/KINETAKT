@@ -28,7 +28,12 @@ const Rect HeaderTempo{448,12,118,44},HeaderSwing{574,12,96,44},HeaderMaster{678
 const Rect HeaderClock{896,12,112,44},HeaderMidiOut{1016,12,300,44},HeaderFile{1324,12,128,44},HeaderSettings{1460,12,124,44};
 constexpr int PatternY=72,PatternH=38,PatternX=110,PatternW=50,PatternGap=5;
 Rect patternRect(int i){return {PatternX+i*(PatternW+PatternGap),PatternY,PatternW,PatternH};}
-const Rect PatternSong{1000,72,110,38},PatternKit{1118,72,110,38},PatternMenu{1236,72,110,38};
+const Rect PatternSong{1000,72,110,38},PatternKit{1118,72,110,38},PatternMenu{1236,72,110,38},PatternSounds{1354,72,110,38};
+// Sound browser overlay (covers the main area).
+const Rect BrowserPanel{376,124,1208,736},BrowserClose{376+1208-130,132,118,34},BrowserLoad{376+1208-420,132,282,34};
+constexpr int BrowserListY=226,BrowserRowH=30,BrowserRows=20;
+Rect browserTab(int i){return {376+14+i*176,132,170,34};}
+const Rect BrowserResample{376+14,860-50,300,36},BrowserChop{376+330,860-50,300,36};
 constexpr int TrackX=16,TrackY=124,TrackW=344,TrackH=43,TrackGap=3;
 Rect trackRect(int t){return {TrackX,TrackY+t*(TrackH+TrackGap),TrackW,TrackH};}
 Rect trackMute(int t){auto r=trackRect(t);return {r.x+r.w-70,r.y+9,30,26};}
@@ -75,6 +80,7 @@ struct TrigUI::Impl {
     int tickCount=0;
     // v0.2: scenes, clipboards, undo.
     bool padMode=false;
+    bool browserOpen=false;int browserTabIndex=0,browserScroll=0,browserSelected=-1,browserClickTick=-100;std::filesystem::path customFolder;std::vector<std::filesystem::path> browserFiles;
     bool sceneView=false;int editScene=-1;bool dragFader=false;int faderChannel=-1,faderCc=-1;bool learnFader=false;
     std::vector<std::pair<int,TrigStep>> stepClipboard;std::unique_ptr<std::array<TrigStep,16>> pageClipboard;std::unique_ptr<TrigScene> sceneClipboard;
     std::vector<std::pair<int,TrigPattern>> undoStack,redoStack;std::unique_ptr<TrigPattern> committed;int committedSequence=-1;
@@ -259,13 +265,14 @@ struct TrigUI::Impl {
     void saveSettings(){
         std::ofstream f(settingsPath().u8string(),std::ios::trunc);if(!f)return;f<<"TRIGSETTINGS 1\n";
         for(const auto& m:macros)f<<"M "<<m.track<<' '<<m.param<<' '<<m.value<<' '<<m.midiChannel<<' '<<m.midiCc<<'\n';
-        f<<"PADS "<<padMode<<'\n';f<<"FOLLOW "<<follow<<'\n';f<<"FADER "<<faderChannel<<' '<<faderCc<<'\n';
+        f<<"PADS "<<padMode<<'\n';f<<"FOLLOW "<<follow<<'\n';f<<"FADER "<<faderChannel<<' '<<faderCc<<'\n';if(!customFolder.empty())f<<"FOLDER "<<customFolder.u8string()<<'\n';
     }
     void loadSettings(){
         std::ifstream f(settingsPath().u8string());std::string tag;int version=0;if(!f||!(f>>tag>>version)||tag!="TRIGSETTINGS")return;
         for(auto& m:macros){Macro parsed;if(!(f>>tag>>parsed.track>>parsed.param>>parsed.value>>parsed.midiChannel>>parsed.midiCc)||tag!="M")return;if(parsed.track>=TrigTracks||parsed.param>=TrigParamCount)parsed=Macro{};m=parsed;}
         int value=1;if(f>>tag>>value&&tag=="PADS"){padMode=value!=0;f>>tag>>value;}if(tag=="FOLLOW")follow=value!=0;
         int channel=-1,cc=-1;if(f>>tag>>channel>>cc&&tag=="FADER"){faderChannel=channel;faderCc=std::clamp(cc,-1,127);}
+        std::string line;while(std::getline(f,line))if(line.rfind("FOLDER ",0)==0)customFolder=std::filesystem::u8path(line.substr(7));
     }
 
     // ----- project -----
@@ -292,6 +299,84 @@ struct TrigUI::Impl {
         std::string error;for(int p=0;p<16;++p){const auto path=base/"demo-kit"/files[p];if(std::filesystem::exists(path))engine.load(p,path.u8string(),error);}
     }
     // One WAV per audio track that has trigs (solo), plus the full mix.
+    // ----- sound browser -----
+    std::filesystem::path browserFolder()const{return browserTabIndex==0?base/"demo-kit":browserTabIndex==1?base/"samples":customFolder;}
+    void scanBrowser(){
+        browserFiles.clear();browserScroll=0;browserSelected=-1;const auto folder=browserFolder();std::error_code ec;
+        if(folder.empty()||!std::filesystem::is_directory(folder,ec))return;
+        for(auto it=std::filesystem::recursive_directory_iterator(folder,std::filesystem::directory_options::skip_permission_denied,ec);it!=std::filesystem::recursive_directory_iterator()&&browserFiles.size()<4000;it.increment(ec)){
+            if(ec)break;if(!it->is_regular_file(ec))continue;auto ext=it->path().extension().u8string();for(auto& c:ext)c=char(std::tolower(static_cast<unsigned char>(c)));if(ext==".wav")browserFiles.push_back(it->path());}
+        std::sort(browserFiles.begin(),browserFiles.end());
+    }
+    void openBrowser(){browserOpen=true;scanBrowser();status("SONS : clic = écouter · double-clic ou CHARGER = mettre sur la piste "+std::to_string(ui.selectedTrack+1)+" · Échap = fermer.");}
+    void closeBrowser(){browserOpen=false;engine.stopPreview();}
+    void loadSelected(){
+        if(browserSelected<0||browserSelected>=int(browserFiles.size()))return;engine.stopPreview();loadSampleFile(ui.selectedTrack,browserFiles[size_t(browserSelected)].u8string());
+    }
+    void browserClick(int x,int y,bool right){
+        if(right)return;
+        if(BrowserClose.in(x,y)){closeBrowser();return;}
+        if(BrowserLoad.in(x,y)){loadSelected();return;}
+        for(int i=0;i<3;++i)if(browserTab(i).in(x,y)){
+            browserTabIndex=i;
+            if(i==2){const auto chosen=host.openPath("Choisis un WAV : son dossier sera parcouru","wav");if(!chosen.empty()){customFolder=std::filesystem::u8path(chosen).parent_path();saveSettings();}}
+            scanBrowser();return;}
+        if(BrowserResample.in(x,y)){resample();return;}
+        if(BrowserChop.in(x,y)){chop(false);return;}
+        if(y>=BrowserListY&&y<BrowserListY+BrowserRows*BrowserRowH){
+            const int index=browserScroll+(y-BrowserListY)/BrowserRowH;if(index>=int(browserFiles.size()))return;
+            if(index==browserSelected&&tickCount-browserClickTick<12){loadSelected();return;}
+            browserSelected=index;browserClickTick=tickCount;std::string error;
+            if(!engine.preview(browserFiles[size_t(index)].u8string(),error))status("Écoute impossible : "+error);
+            else status("Écoute : "+browserFiles[size_t(index)].filename().u8string()+" — double-clic ou CHARGER pour la piste "+std::to_string(ui.selectedTrack+1)+".");
+        }
+    }
+    void paintBrowser(Painter& p){
+        const auto& r=BrowserPanel;p.round(r.x,r.y,r.w,r.h,12,Panel);p.roundFrame(r.x,r.y,r.w,r.h,12,Orange,2);
+        static const char* tabs[3]={"KIT DÉMO","SAMPLES","AUTRE DOSSIER…"};
+        for(int i=0;i<3;++i)button(p,browserTab(i),tabs[i],browserTabIndex==i,Orange,12);
+        button(p,BrowserLoad,"CHARGER SUR LA PISTE "+std::to_string(ui.selectedTrack+1),false,Green,12,browserSelected>=0);
+        button(p,BrowserClose,"FERMER",false,Blue,12);
+        const auto folder=browserFolder();
+        p.text(r.x+14,176,r.w-28,30,folder.empty()?"Aucun dossier : clique sur AUTRE DOSSIER et choisis un WAV dedans.":folder.u8string()+" — "+std::to_string(browserFiles.size())+" fichier(s) WAV",11,Muted,Align::Left);
+        if(browserFiles.empty())p.text(r.x+14,BrowserListY,r.w-28,40,browserTabIndex==1?"Le dossier samples est vide : rééchantillonne un pattern ou copie tes WAV dedans.":"Aucun WAV ici.",14,Dim,Align::Left);
+        for(int row=0;row<BrowserRows;++row){
+            const int index=browserScroll+row;if(index>=int(browserFiles.size()))break;const int y=BrowserListY+row*BrowserRowH;const bool selected=index==browserSelected;
+            p.round(r.x+10,y,r.w-20,BrowserRowH-3,5,selected?mix(Panel2,Orange,.35):(row%2?Panel:Panel2));
+            std::error_code ec;auto rel=std::filesystem::relative(browserFiles[size_t(index)],folder,ec);const std::string name=ec?browserFiles[size_t(index)].filename().u8string():rel.u8string();
+            p.text(r.x+22,y,r.w-60,BrowserRowH-3,name,13,selected?White:Ink,Align::Left,selected);
+        }
+        if(int(browserFiles.size())>BrowserRows){const int h=BrowserRows*BrowserRowH;const int bar=std::max(30,h*BrowserRows/int(browserFiles.size()));const int pos=(h-bar)*browserScroll/std::max(1,int(browserFiles.size())-BrowserRows);p.round(r.x+r.w-14,BrowserListY+pos,6,bar,3,Dim);}
+        button(p,BrowserResample,"RÉÉCHANTILLONNER LE PATTERN ICI",false,Red,12);
+        button(p,BrowserChop,"DÉCOUPER LE SAMPLE (CHOP)",false,Yellow,12,!isMidi(ui.selectedTrack));
+        p.text(r.x+650,860-50,r.w-664,36,"molette = défiler · glisse aussi un WAV depuis Windows sur une piste",11,Muted,Align::Left);
+    }
+    // Renders the current pattern to samples/ and loads the result on the selected track.
+    void resample(){
+        const int cycles=askCycles();if(!cycles)return;const int t=ui.selectedTrack;
+        std::error_code ec;std::filesystem::create_directories(base/"samples",ec);
+        const auto stamp=std::to_string(std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count()%1000000);
+        const auto file=base/"samples"/std::filesystem::u8path("resample-"+patternName(snap->sequence)+"-"+stamp+".wav");
+        host.stopAudio();std::string error;const bool ok=engine.exportCurrentPatternWav(file.u8string(),error,cycles);host.startAudio();
+        if(!ok){status("Rééchantillonnage impossible : "+error);return;}
+        if(isMidi(t))setType(t,TrigTrackType::Audio);
+        if(engine.load(t,file.u8string(),error)){changed();refresh();if(browserOpen&&browserTabIndex==1)scanBrowser();status("Pattern rééchantillonné sur la piste "+std::to_string(t+1)+" ("+file.filename().u8string()+"). Utilise DÉCOUPER pour le jouer en tranches.");}
+        else status("Fichier créé mais pas chargé : "+error);
+    }
+    // Chop: one trig per step, each playing the next slice of the sample (START/END locks).
+    void chop(bool shuffled){
+        const int t=ui.selectedTrack;if(isMidi(t)){status("Le découpage se fait sur une piste son.");return;}
+        if(snap->names[t].empty()){status("Charge d'abord un sample sur la piste.");return;}
+        const int choice=host.popup({{"8 tranches"},{"16 tranches"},{"32 tranches"},{"",false,true,true},{"16 tranches, ordre au hasard"}});if(choice<0)return;
+        const int slices=choice==0?8:choice==2?32:16;shuffled=shuffled||choice==4;
+        std::vector<int> order(static_cast<size_t>(slices));for(int i=0;i<slices;++i)order[size_t(i)]=i;if(shuffled)std::shuffle(order.begin(),order.end(),rng);
+        TrigTrack config=current();if(config.length<slices){config.length=uint8_t(std::min(slices,TrigMaxSteps));engine.trigSetTrackConfig(t,config);}
+        for(int i=0;i<slices&&i<TrigMaxSteps;++i){
+            TrigStep st;st.trig=true;st.velocity=current().defaultVelocity;st.length=1;engine.trigSetStep(t,i,st);
+            engine.trigSetLock(t,i,TrigStart,order[size_t(i)]/double(slices));engine.trigSetLock(t,i,TrigEnd,(order[size_t(i)]+1)/double(slices));
+        }
+        changed();refresh();ui.latched.clear();status(std::to_string(slices)+" tranches posées sur les pas (locks START / END). Mélange-les avec GÉNÉRER ou Ctrl+Z.");
+    }
     // Conditions like 1:4 or !1ST only play on later passes: let the user render several cycles.
     int askCycles(){const int choice=host.popup({{"Durée : 1 cycle"},{"Durée : 2 cycles"},{"Durée : 4 cycles (conseillé avec des conditions)"},{"Durée : 8 cycles"}});return choice<0?0:(1<<choice);}
     void exportStems(){
@@ -330,7 +415,8 @@ struct TrigUI::Impl {
             {"Muter : varier 20 % des pas"},{"Vélocités au hasard (humaniser)"},{"Accidents : probabilités et conditions au hasard"},
             {"Locks au hasard sur "+lockName,false,canLock},{"Hauteurs au hasard (gamme mineure)",false,!isMidi(t)||true},
             {"",false,true,true},
-            {"Décaler la piste d'un pas →"},{"Décaler la piste d'un pas ←"},{"Inverser l'ordre des pas"}});
+            {"Décaler la piste d'un pas →"},{"Décaler la piste d'un pas ←"},{"Inverser l'ordre des pas"},
+            {"",false,true,true},{"Découper le sample en tranches (chop)…",false,!isMidi(t)}});
         if(choice<0)return;
         std::vector<TrigStep> steps(current().steps.begin(),current().steps.begin()+length);
         static const int hits[6]={3,4,5,7,9,11};
@@ -368,6 +454,7 @@ struct TrigUI::Impl {
             std::vector<TrigStep> out(static_cast<size_t>(length));const int shift=choice==17?1:length-1;for(int i=0;i<length;++i)out[size_t((i+shift)%length)]=steps[size_t(i)];
             writeSteps(out);status("Piste décalée.");
         }else if(choice==19){std::reverse(steps.begin(),steps.end());writeSteps(steps);status("Pas inversés.");}
+        else if(choice==21){chop(false);return;}
         ui.latched.clear();
     }
     void exportWav(){
@@ -402,7 +489,7 @@ struct TrigUI::Impl {
     }
     void trackMenu(int t){
         selectTrack(t);const bool midi=isMidi(t);const auto& seq=snap->sequences[snap->sequence];
-        const int choice=host.popup({{"Piste SON (sample)",!midi},{"Piste MIDI (vers Ableton)",midi},{"",false,true,true},{"Charger un sample…",false,!midi},{"Canal MIDI…",false,midi},{"",false,true,true},{"Muet",seq.tracks[t].mute},{"Solo",seq.tracks[t].solo},{"",false,true,true},{"Copier la piste"},{"Coller la piste",false,trackClipboard!=nullptr},{"Effacer les pas de la piste"}});
+        const int choice=host.popup({{"Piste SON (sample)",!midi},{"Piste MIDI (vers Ableton)",midi},{"",false,true,true},{"Charger un sample…",false,!midi},{"Canal MIDI…",false,midi},{"",false,true,true},{"Muet",seq.tracks[t].mute},{"Solo",seq.tracks[t].solo},{"",false,true,true},{"Copier la piste"},{"Coller la piste",false,trackClipboard!=nullptr},{"Effacer les pas de la piste"},{"",false,true,true},{"Rééchantillonner le pattern sur cette piste…"},{"Découper son sample (chop)…",false,!midi}});
         TrigTrack config=current();
         switch(choice){
         case 0:setType(t,TrigTrackType::Audio);break;
@@ -414,6 +501,8 @@ struct TrigUI::Impl {
         case 9:trackClipboard=std::make_unique<TrigTrack>(current());status("Piste copiée.");break;
         case 10:if(trackClipboard){engine.trigSetTrack(t,*trackClipboard);changed();status("Piste collée.");}break;
         case 11:engine.trigClearTrack(t);ui.latched.clear();changed();status("Pas de la piste effacés.");break;
+        case 13:resample();break;
+        case 14:chop(false);break;
         default:break;
         }
         refresh();
@@ -585,7 +674,8 @@ struct TrigUI::Impl {
         button(p,PatternSong,snap->songPlaying?"SONG ▶":"SONG",snap->songPlaying,Green,13);
         button(p,PatternKit,snap->program==0?"KIT A":"KIT "+patternName(snap->sequence),false,Blue,13);
         button(p,PatternMenu,"COPIER…",false,Blue,13);
-        p.text(1354,PatternY,230,PatternH,chain.empty()?"song vide":chain,11,Muted,Align::Left);
+        button(p,PatternSounds,"SONS",browserOpen,Orange,13);
+        p.text(1472,PatternY,112,PatternH,chain.empty()?"song vide":chain,11,Muted,Align::Left);
         // Tracks
         bool anySolo=false;for(const auto& t:seq.tracks)anySolo=anySolo||t.solo;
         for(int t=0;t<TrigTracks;++t){
@@ -669,6 +759,7 @@ struct TrigUI::Impl {
             Rect small{r.x,r.y,r.w,r.h};drawKnob(p,small,k,dragMacro==i);
         }
         }
+        if(browserOpen)paintBrowser(p);
         // Status bar
         p.fill(0,DesignHeight-30,DesignWidth,30,Panel);p.line(0,DesignHeight-30,DesignWidth,DesignHeight-30,Line);
         p.text(16,DesignHeight-30,1180,30,ui.status,12,Ink,Align::Left);
@@ -702,6 +793,8 @@ struct TrigUI::Impl {
         if(PatternSong.in(x,y)){songMenu();return;}
         if(PatternKit.in(x,y)){kitMenu();return;}
         if(PatternMenu.in(x,y)){patternMenu(snap->sequence);return;}
+        if(PatternSounds.in(x,y)){if(browserOpen)closeBrowser();else openBrowser();return;}
+        if(browserOpen&&BrowserPanel.in(x,y)){browserClick(x,y,right);return;}
         for(int t=0;t<TrigTracks;++t){
             if(!trackRect(t).in(x,y))continue;
             if(right){trackMenu(t);return;}
@@ -774,6 +867,7 @@ struct TrigUI::Impl {
     void mouseUp(){if(fillMouse){fillMouse=false;engine.setFill(fillKey);}const bool macro=dragMacro>=0;dragKnob=dragMacro=dragHeader=paintStep=-1;dragFader=false;gestureOpen=false;gesture.clear();if(macro)saveSettings();}
     void wheel(int x,int y,int delta,int modifiers){
         refresh();gestureOpen=false;const bool fine=(modifiers&ModShift)!=0;gesture="wheel "+std::to_string(x/40)+","+std::to_string(y/40);
+        if(browserOpen&&BrowserPanel.in(x,y)){browserScroll=std::clamp(browserScroll-delta*3,0,std::max(0,int(browserFiles.size())-BrowserRows));return;}
         if(sceneView&&Rect{Crossfader.x-20,Crossfader.y,Crossfader.w+40,Crossfader.h}.in(x,y)){setFader(snap->crossfader+delta*(fine?.01:.05));return;}
         if(HeaderTempo.in(x,y)){engine.setTempo(snap->tempo+delta*(fine?.1:1.));changed();return;}
         if(HeaderSwing.in(x,y)){engine.trigSetSwing(pattern().swing+delta);changed();return;}
@@ -804,7 +898,7 @@ struct TrigUI::Impl {
         }
         switch(code){
         case KeySpace:togglePlay();break;
-        case KeyEscape:ui.latched.clear();if(editScene>=0){editScene=-1;status("Édition de scène terminée.");}else status("Sélection relâchée.");break;
+        case KeyEscape:if(browserOpen){closeBrowser();break;}ui.latched.clear();if(editScene>=0){editScene=-1;status("Édition de scène terminée.");}else status("Sélection relâchée.");break;
         case KeyDelete:case KeyBack:clearLatchedLocks();break;
         case KeyLeft:ui.stepPage=std::max(0,ui.stepPage-1);break;
         case KeyRight:ui.stepPage=std::min(pages()-1,ui.stepPage+1);break;

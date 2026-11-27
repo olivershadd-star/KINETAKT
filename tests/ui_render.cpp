@@ -104,6 +104,16 @@ int main(int argc,char** argv){
     shot(ui,"ui-10-generate.png");
     std::filesystem::create_directories("/tmp/stems");host.saveAnswer="/tmp/stems/demo.wav";host.answers={11,2};ui.mouseDown(1388,34,0,0);ui.mouseUp(0,0,0);
     std::cout<<"stems: "<<ui.status<<"\n";
+    // v0.5: sound browser, resample on track 9, chop it in 16 slices.
+    ui.mouseDown(100,124+8*46+20,0,0);ui.mouseUp(0,0,0);
+    ui.mouseDown(1400,90,0,0);ui.mouseUp(0,0,0);std::cout<<"browser: "<<ui.status<<"\n";
+    ui.mouseDown(600,226+4*30+10,0,0);ui.mouseUp(0,0,0);ui.tick();ui.mouseDown(600,226+4*30+10,0,0);ui.mouseUp(0,0,0);
+    s=grab(*engine);std::cout<<"track9 sample="<<s->names[8]<<"\n";
+    shot(ui,"ui-11-browser.png");
+    host.answers={0};ui.mouseDown(376+14+100,828,0,0);ui.mouseUp(0,0,0);std::cout<<"resample: "<<ui.status<<"\n";
+    host.answers={1};ui.mouseDown(376+330+100,828,0,0);ui.mouseUp(0,0,0);std::cout<<"chop: "<<ui.status<<"\n";
+    s=grab(*engine);{const auto& st=s->sequences[0].trig.tracks[8].steps[5];std::cout<<"slice6 trig="<<st.trig<<" locks="<<int(st.lockCount)<<"\n";}
+    ui.key(KeyEscape,true,0);ui.page=1;shot(ui,"ui-12-chop.png");
     std::cout<<"status: "<<ui.status<<"\n";
     return 0;
 }

@@ -1,3 +1,7 @@
 build*/
 *.user
 /out/
+samples/
+projets/
+ELEKTAKT-settings.txt
+ELEKTAKT-devices.txt
