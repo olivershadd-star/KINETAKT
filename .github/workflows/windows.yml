@@ -59,8 +59,10 @@ jobs:
         run: |
           Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pluginval.zip
           Expand-Archive pluginval.zip -DestinationPath pluginval -Force
-          & ./pluginval/pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 600000 --output-dir pluginval-logs "build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3"
-          if ($LASTEXITCODE -ne 0) { Get-ChildItem pluginval-logs -Recurse | Get-Content -Tail 80; throw "pluginval failed" }
+          # pluginval is a GUI-subsystem program: wait for it explicitly.
+          $p = Start-Process ./pluginval/pluginval.exe -ArgumentList '--strictness-level','5','--validate-in-process','--timeout-ms','600000','--output-dir','pluginval-logs','build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3' -NoNewWindow -Wait -PassThru
+          Get-ChildItem pluginval-logs -Recurse -File | ForEach-Object { Get-Content $_.FullName -Tail 40 }
+          if ($p.ExitCode -ne 0) { throw "pluginval failed with $($p.ExitCode)" }
 
       - name: Assemble portable ZIP
         if: steps.version.outputs.publish == 'true'
