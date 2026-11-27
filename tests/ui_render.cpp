@@ -8,6 +8,7 @@
 #include <iostream>
 #include <memory>
 #include <thread>
+#include <filesystem>
 using namespace trig;
 struct CairoPainter:Painter{
     cairo_t* c;explicit CairoPainter(cairo_t* cr):c(cr){}
@@ -29,7 +30,8 @@ struct FakeHost:Host{
     std::vector<int> answers;std::vector<std::string> titles;
     int popup(const std::vector<MenuItem>& items)override{std::cout<<"  [menu]";for(auto& i:items)std::cout<<" | "<<(i.separator?"---":i.label);std::cout<<"\n";if(answers.empty())return -1;int a=answers.front();answers.erase(answers.begin());return a;}
     std::string openPath(const std::string&,const std::string&)override{return {};}
-    std::string savePath(const std::string&,const std::string&,const std::string&)override{return {};}
+    std::string saveAnswer;
+    std::string savePath(const std::string&,const std::string&,const std::string&)override{auto a=saveAnswer;saveAnswer.clear();return a;}
     bool confirm(const std::string&)override{return true;}
     void setTitle(const std::string& t)override{titles.push_back(t);}
     std::vector<std::string> audioOutputs()override{return {"Haut-parleurs"};} int audioOutput()override{return -1;} void selectAudioOutput(int)override{}
@@ -94,6 +96,14 @@ int main(int argc,char** argv){
     for(int b=0;b<200;++b)engine->render(block);ui.tick();
     s=grab(*engine);const auto& lf=s->sequences[0].trig.tracks[2].lfo;std::cout<<"lfo dest="<<int(lf.destination)<<" depth="<<int(lf.depth)<<" wave="<<int(lf.wave)<<" out="<<s->trigLfo[2]<<"\n";
     shot(ui,"ui-9-lfo.png");
+    // v0.4: generator (euclidean 5, then accidents) on track 6, stems export.
+    ui.mouseDown(100,124+5*46+20,0,0);ui.mouseUp(0,0,0);ui.page=0;
+    host.answers={2};ui.mouseDown(376+756+40,195,0,0);ui.mouseUp(0,0,0);std::cout<<"gen: "<<ui.status<<"\n";
+    host.answers={13};ui.mouseDown(376+756+40,195,0,0);ui.mouseUp(0,0,0);std::cout<<"gen: "<<ui.status<<"\n";
+    s=grab(*engine);int hits=0;for(const auto& st:s->sequences[0].trig.tracks[5].steps)hits+=st.trig;std::cout<<"track6 trigs="<<hits<<"\n";
+    shot(ui,"ui-10-generate.png");
+    std::filesystem::create_directories("/tmp/stems");host.saveAnswer="/tmp/stems/demo.wav";host.answers={11,2};ui.mouseDown(1388,34,0,0);ui.mouseUp(0,0,0);
+    std::cout<<"stems: "<<ui.status<<"\n";
     std::cout<<"status: "<<ui.status<<"\n";
     return 0;
 }

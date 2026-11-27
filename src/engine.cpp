@@ -771,13 +771,13 @@ bool Engine::openKit(const std::string& path,const std::string& sampleRoot,std::
     }
     return true;
 }
-bool Engine::exportCurrentPatternWav(const std::string& path,std::string& error){
+bool Engine::exportCurrentPatternWav(const std::string& path,std::string& error,int cycles){
     auto beforeHolder=std::make_unique<Snapshot>(snapshot());const auto& before=*beforeHolder;
     const auto& pattern=before.sequences[before.sequence].trig;
     // One full cycle: the master length, or the longest track at its speed.
     double cycleSteps=pattern.masterLength;
     if(cycleSteps<=0){cycleSteps=16;for(const auto& tr:pattern.tracks){bool used=false;for(const auto& st:tr.steps)used=used||!st.empty();if(used)cycleSteps=std::max(cycleSteps,tr.length/trigSpeedFactor(tr.speed));}}
-    const uint32_t frames=uint32_t(std::max(1ll,std::llround(std::min(cycleSteps,512.)*Rate*60./before.tempo/4.)));
+    const uint32_t frames=uint32_t(std::max(1ll,std::llround(std::min(cycleSteps*std::clamp(cycles,1,16),2048.)*Rate*60./before.tempo/4.)));
     const uint32_t dataBytes=frames*2*3;
     std::ofstream file(std::filesystem::u8path(path),std::ios::binary|std::ios::trunc);
     if(!file){error="Impossible de creer le fichier WAV.";return false;}

@@ -365,7 +365,8 @@ public:
     bool openKit(const std::string&,const std::string& sampleRoot,std::string& error);
     // Renders exactly one cycle of the currently active sequence through the
     // real mixer and insert chain, as stereo 48 kHz / 24-bit PCM.
-    bool exportCurrentPatternWav(const std::string&,std::string& error);
+    // cycles: how many full pattern cycles to render (trig conditions such as 1:4 need several).
+    bool exportCurrentPatternWav(const std::string&,std::string& error,int cycles=1);
     bool open(const std::string&,std::string& error);
 
     // ----- TRIG sequencer -----

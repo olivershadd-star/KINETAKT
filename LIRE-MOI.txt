@@ -15,6 +15,8 @@ DÉMARRER
    puis le crossfader passe de A à B (assignable à un potard MIDI par clic droit).
 10. LFO (dernière page de potards) : choisis une DESTINATION puis monte la PROFONDEUR.
 11. RÉGLAGES > Entrée MIDI : pads → les pads 36–51 de ton MPK mini jouent les pistes 1–16.
+12. GÉNÉRER ▾ (au-dessus des pas) : euclidien, aléatoire, mutation, accidents… Ctrl+Z si ça ne plaît pas.
+13. FICHIER > Exporter les pistes séparées : le mix + un WAV par piste, pour tes banques de loops.
 
 ENVOYER LE MIDI VERS ABLETON (pistes MIDI + horloge)
 1. Installe loopMIDI (gratuit) : https://www.tobias-erichsen.de/software/loopmidi.html

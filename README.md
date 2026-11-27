@@ -3,7 +3,7 @@
 # ELEKTAKT
 ### ELEKTRON-STYLE SEQUENCER · SOUND + MIDI TRACKS · FREE
 
-![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.3.0-EF343E?style=for-the-badge&labelColor=10151E)
+![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.4.0-EF343E?style=for-the-badge&labelColor=10151E)
 ![Windows](https://img.shields.io/badge/WINDOWS-10%20%2F%2011_X64-19B9FF?style=for-the-badge&labelColor=10151E)
 ![Licence](https://img.shields.io/badge/LICENCE-AGPL--3.0--or--later-F5C343?style=for-the-badge&labelColor=10151E)
 
@@ -22,7 +22,7 @@
 
 ## 01 // TÉLÉCHARGER ET LANCER — DOWNLOAD & RUN
 
-1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.3.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
+1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.4.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
 2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `ELEKTAKT.exe`.
 3. Lance **ELEKTAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
 
@@ -46,6 +46,7 @@
 | **Parameter slide** | Page TRIG, potard **SLIDE** sur un pas sélectionné : ses valeurs verrouillées glissent en douceur jusqu'au prochain lock du même paramètre (volume, pan, enveloppe, effets, CC MIDI). Le pas affiche « SLIDE ». |
 | **Scènes + crossfader** | En bas, onglet **SCÈNES** : 16 scènes par pattern. Clic sur une scène = édition : les potards de **toutes les pistes** écrivent dans la scène (potard vert). Clic droit = la mettre en **A** ou en **B**. Le **crossfader** passe en douceur de A à B, à la souris, à la molette ou avec un potard MIDI (clic droit = MIDI Learn). |
 | **LFO** | Page **LFO** de chaque piste : FORME (sinus, triangle, rampes, carré, aléatoire), CYCLE (½ à 256 pas, calé sur la piste), PROFONDEUR (±), DESTINATION (enveloppe, volume, pan, paramètres d'effet, ou un CC pour les pistes MIDI) et MODE (LIBRE, TRIG = repart à chaque trig, UNE FOIS = enveloppe). Le potard SORTIE montre l'LFO en mouvement. |
+| **GÉNÉRER ▾** | Au-dessus des pas, pour la piste sélectionnée : **euclidien** (3 à 11 coups répartis), **aléatoire** (25 / 50 / 75 %), **muter** (20 % des pas changent), **vélocités au hasard**, **accidents** (probabilités, cycles A:B, retrigs, micro-décalages semés au hasard), **locks au hasard** sur le dernier potard touché, **hauteurs au hasard** (gamme mineure), **décaler** d'un pas, **inverser**. Ça ne te plaît pas : **Ctrl+Z**. |
 | **Copier / coller** | Pas sélectionnés : **COPIER LES PAS** puis sélectionne le pas de départ et **COLLER ICI** (ou Ctrl+C / Ctrl+V). **COPIER PAGE / COLLER PAGE** pour 16 pas d'un coup. Sans sélection, Ctrl+C / Ctrl+V copie la piste entière. |
 | **Annuler** | **Ctrl+Z** annule, **Ctrl+Y** rétablit (64 niveaux) : pas, locks, réglages de piste, scènes. Les réglages de son (sample, effets choisis) ne sont pas concernés. |
 | **Longueur / vitesse par piste** | En haut : **LONGUEUR** (1 à 64 pas, molette ou glisser, clic droit = valeurs rapides) et **VITESSE** (2x, 1x, 1/2x, 1/4x, 1/8x). Des pistes de longueurs différentes créent des polyrythmies. |
@@ -82,7 +83,8 @@ Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI 
 | `.elektakt` | Projet complet : patterns, pistes, locks, song, kits. |
 | `.kicklab` | Projet KICK : **FICHIER → Importer un projet KICK** convertit ses pas en trigs. |
 | `.kickkit` | Kit de 16 sons et leurs réglages (compatible KICK). |
-| `.wav` | **FICHIER → Exporter le pattern en WAV** : un cycle complet, 48 kHz / 24 bits. |
+| `.wav` | **FICHIER → Exporter le pattern en WAV** : 1, 2, 4 ou 8 cycles du pattern, 48 kHz / 24 bits. Choisis 4 cycles si tu utilises des conditions (1:4, !1ST…). |
+| `…-T03-….wav` | **FICHIER → Exporter les pistes séparées (stems)** : le mix plus un WAV par piste son, même durée, prêts à glisser dans Ableton ou dans ta banque de loops. |
 
 L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages des macros, du crossfader et des appareils MIDI sont gardés à côté de `ELEKTAKT.exe` (`ELEKTAKT-settings.txt`, `ELEKTAKT-devices.txt`).
 
@@ -95,6 +97,7 @@ L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages d
 - [x] Scènes avec crossfader A/B, parameter slide (0.2.0)
 - [x] Copier / coller de pas et de pages, annuler / rétablir (0.2.0)
 - [x] LFO par piste, mode pads pour l'entrée MIDI (0.3.0)
+- [x] Générateur (euclidien, aléatoire, mutation, accidents), export des stems (0.4.0)
 - [ ] Version VST3 pour Ableton
 
 ## 07 // COMPILER — BUILD FROM SOURCE

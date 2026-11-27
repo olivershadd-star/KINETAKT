@@ -1,5 +1,10 @@
 # ELEKTAKT — versions
 
+## 0.4.0
+- **GÉNÉRER ▾** par piste : euclidien (3–11 coups), aléatoire 25/50/75 %, mutation de 20 % des pas, vélocités au hasard, « accidents » (probabilités, cycles, retrigs, micro-décalages), locks au hasard sur le dernier potard touché, hauteurs au hasard en gamme mineure, décalage d'un pas, inversion. Tout s'annule avec Ctrl+Z.
+- **Export des stems** : le mix et un WAV par piste son, de même durée.
+- Les exports WAV durent 1, 2, 4 ou 8 cycles, pour entendre les conditions (1:4, !1ST…).
+
 ## 0.3.0
 - **LFO par piste** (page LFO) : 6 formes, cycle de ½ à 256 pas calé sur la vitesse de la piste, profondeur ±, destination (enveloppe, volume, pan, paramètres d'effet, ou CC MIDI), modes LIBRE / TRIG / UNE FOIS, sortie visible en direct.
 - **Mode pads** pour l'entrée MIDI : notes 36–51 → pistes 1–16 (MPK mini, LPD8…), avec enregistrement REC sur la bonne piste.

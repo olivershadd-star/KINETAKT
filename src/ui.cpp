@@ -8,6 +8,8 @@
 #include <fstream>
 #include <sstream>
 #include <initializer_list>
+#include <random>
+#include <chrono>
 
 namespace trig {
 namespace {
@@ -37,7 +39,7 @@ const Rect TrackType{MainX+330,128,150,40},TrackLength{MainX+490,128,110,40},Tra
 const Rect TrackCopy{MainX+972,128,74,40},TrackPaste{MainX+1052,128,74,40},TrackClear{MainX+1132,128,76,40};
 constexpr int PagesY=180;
 Rect stepPageRect(int p){return {MainX+p*96,PagesY,90,30};}
-const Rect FollowRect{MainX+392,PagesY,104,30},PageCopy{MainX+504,PagesY,120,30},PagePaste{MainX+630,PagesY,120,30};
+const Rect FollowRect{MainX+392,PagesY,104,30},PageCopy{MainX+504,PagesY,120,30},PagePaste{MainX+630,PagesY,120,30},Generate{MainX+756,PagesY,132,30};
 constexpr int StepY=232,StepH=96,StepW=70,StepGapSmall=4,StepGapBeat=12;
 Rect stepRect(int i){const int beat=i/4,inBeat=i%4;const int x=MainX+beat*(4*StepW+3*StepGapSmall+StepGapBeat)+inBeat*(StepW+StepGapSmall);return {x,StepY,StepW,StepH};}
 const Rect LatchInfo{MainX,346,520,30},LatchCopy{MainX+544,346,160,30},LatchPaste{MainX+712,346,160,30},LatchClear{MainX+880,346,160,30},LatchRelease{MainX+1048,346,160,30};
@@ -289,21 +291,101 @@ struct TrigUI::Impl {
         static const char* files[16]={"01-Kick.wav","02-Snare.wav","03-Closed-Hat.wav","04-Open-Hat.wav","05-Clap.wav","06-Low-Tom.wav","07-Mid-Tom.wav","08-High-Tom.wav","09-Rim.wav","10-Shaker.wav","11-Claves.wav","12-Cowbell.wav","13-Bass-C.wav","14-Bass-E.wav","15-Bass-G.wav","16-Chime.wav"};
         std::string error;for(int p=0;p<16;++p){const auto path=base/"demo-kit"/files[p];if(std::filesystem::exists(path))engine.load(p,path.u8string(),error);}
     }
+    // One WAV per audio track that has trigs (solo), plus the full mix.
+    // Conditions like 1:4 or !1ST only play on later passes: let the user render several cycles.
+    int askCycles(){const int choice=host.popup({{"Durée : 1 cycle"},{"Durée : 2 cycles"},{"Durée : 4 cycles (conseillé avec des conditions)"},{"Durée : 8 cycles"}});return choice<0?0:(1<<choice);}
+    void exportStems(){
+        const int cycles=askCycles();if(!cycles)return;
+        const auto chosen=host.savePath("Exporter les stems : choisis le dossier et le nom de base","wav",patternName(snap->sequence)+".wav");if(chosen.empty())return;
+        auto basePath=std::filesystem::u8path(chosen);const auto folder=basePath.parent_path();const auto stem=basePath.stem().u8string();
+        const auto seq=snap->sequences[snap->sequence];std::vector<int> used;
+        for(int t=0;t<TrigTracks;++t){if(isMidi(t))continue;bool any=false;for(const auto& st:track(t).steps)any=any||st.trig;if(any)used.push_back(t);}
+        if(used.empty()){status("Aucune piste son avec des trigs dans ce pattern.");return;}
+        host.stopAudio();std::string error;int written=0;
+        auto clean=[](std::string name){for(auto& c:name)if(c=='/'||c=='\\'||c==':'||c=='*'||c=='?'||c=='"'||c=='<'||c=='>'||c=='|')c='_';return name;};
+        bool ok=engine.exportCurrentPatternWav((folder/std::filesystem::u8path(stem+"-mix.wav")).u8string(),error,cycles);if(ok)++written;
+        for(int t:used){
+            for(int u=0;u<TrigTracks;++u){engine.setTrackSolo(u,u==t);}engine.setTrackMute(t,false);
+            char number[8];std::snprintf(number,sizeof(number),"%02d",t+1);
+            const auto file=folder/std::filesystem::u8path(stem+"-T"+number+"-"+clean(trackName(t))+".wav");
+            if(engine.exportCurrentPatternWav(file.u8string(),error,cycles))++written;else ok=false;
+        }
+        for(int u=0;u<TrigTracks;++u){engine.setTrackSolo(u,seq.tracks[size_t(u)].solo);engine.setTrackMute(u,seq.tracks[size_t(u)].mute);}
+        host.startAudio();refresh();
+        status(ok?std::to_string(written)+" fichiers WAV exportés dans "+folder.filename().u8string()+" (mix + une piste par son, 48 kHz / 24 bits).":"Export incomplet : "+error);
+    }
+    // ----- generator: euclidean / random / mutation / random locks -----
+    std::mt19937 rng{uint32_t(std::chrono::steady_clock::now().time_since_epoch().count())};
+    double random01(){return std::uniform_real_distribution<double>(0.,1.)(rng);}
+    void writeSteps(const std::vector<TrigStep>& steps){for(int i=0;i<int(steps.size());++i)engine.trigSetStep(ui.selectedTrack,i,steps[size_t(i)]);changed();refresh();}
+    TrigStep newTrig(){TrigStep st;st.trig=true;st.velocity=current().defaultVelocity;st.length=current().defaultLength;return st;}
+    void generateMenu(){
+        const int t=ui.selectedTrack;const int length=current().length;const bool canLock=lastParam>=0&&lastTrack==t&&lastParam!=TrigPitch;
+        const std::string lockName=canLock?trigParamName(lastParam,&snap->edits[t]):"(touche d'abord un potard de cette piste)";
+        const int choice=host.popup({
+            {"Euclidien : 3 coups"},{"Euclidien : 4 coups"},{"Euclidien : 5 coups"},{"Euclidien : 7 coups"},{"Euclidien : 9 coups"},{"Euclidien : 11 coups"},
+            {"",false,true,true},
+            {"Aléatoire léger (25 %)"},{"Aléatoire moyen (50 %)"},{"Aléatoire dense (75 %)"},
+            {"",false,true,true},
+            {"Muter : varier 20 % des pas"},{"Vélocités au hasard (humaniser)"},{"Accidents : probabilités et conditions au hasard"},
+            {"Locks au hasard sur "+lockName,false,canLock},{"Hauteurs au hasard (gamme mineure)",false,!isMidi(t)||true},
+            {"",false,true,true},
+            {"Décaler la piste d'un pas →"},{"Décaler la piste d'un pas ←"},{"Inverser l'ordre des pas"}});
+        if(choice<0)return;
+        std::vector<TrigStep> steps(current().steps.begin(),current().steps.begin()+length);
+        static const int hits[6]={3,4,5,7,9,11};
+        if(choice<=5){
+            const int k=std::min(hits[choice],length);std::vector<TrigStep> out(static_cast<size_t>(length));
+            for(int i=0;i<length;++i){const bool on=((i*k)%length)<k;out[size_t(i)]=on?(steps[size_t(i)].trig?steps[size_t(i)]:newTrig()):TrigStep{};if(!on&&steps[size_t(i)].lockCount&&!steps[size_t(i)].trig)out[size_t(i)]=steps[size_t(i)];}
+            writeSteps(out);status("Euclidien "+std::to_string(k)+" sur "+std::to_string(length)+" pas. Ctrl+Z si ça ne te plaît pas.");
+        }else if(choice>=7&&choice<=9){
+            const double density=choice==7?.25:choice==8?.5:.75;for(auto& st:steps){const bool on=random01()<density;if(on&&!st.trig)st=newTrig();else if(!on&&st.trig)st=TrigStep{};}
+            writeSteps(steps);status("Pas tirés au hasard ("+std::to_string(int(density*100))+" %). Écoute, garde ou Ctrl+Z.");
+        }else if(choice==11){
+            int changes=std::max(1,length/5);for(int n=0;n<changes;++n){auto& st=steps[size_t(std::uniform_int_distribution<int>(0,length-1)(rng))];if(st.trig)st=TrigStep{};else st=newTrig();}
+            writeSteps(steps);status("Mutation : "+std::to_string(changes)+" pas changés.");
+        }else if(choice==12){
+            for(auto& st:steps)if(st.trig)st.velocity=uint8_t(std::clamp(int(st.velocity)+std::uniform_int_distribution<int>(-30,20)(rng),20,127));
+            writeSteps(steps);status("Vélocités humanisées.");
+        }else if(choice==13){
+            for(auto& st:steps){if(!st.trig)continue;const double r=random01();
+                if(r<.25)st.probability=uint8_t(std::uniform_int_distribution<int>(40,90)(rng));
+                else if(r<.40){static const int cycles[][2]={{1,2},{2,2},{1,3},{1,4},{3,4},{4,4}};const auto& c=cycles[std::uniform_int_distribution<int>(0,5)(rng)];st.condition=uint8_t(trigConditionFromCycle(c[0],c[1]));}
+                else if(r<.48)st.retrig=uint8_t(std::uniform_int_distribution<int>(2,4)(rng));
+                else if(r<.55)st.micro=int8_t(std::uniform_int_distribution<int>(-8,8)(rng));}
+            writeSteps(steps);status("Accidents semés : probabilités, cycles, retrigs et micro-décalages au hasard.");
+        }else if(choice==14&&canLock){
+            const double base=lastParam>=TrigCcFirst?std::max(0,int(current().ccValue[size_t(lastParam-TrigCcFirst)]))/127.:trigParamBase(snap->edits[t],lastParam);int written=0;
+            for(int i=0;i<length;++i)if(steps[size_t(i)].trig&&random01()<.6){engine.trigSetLock(t,i,lastParam,std::clamp(base+(random01()-.5)*.8,0.,1.));++written;}
+            changed();refresh();status(std::to_string(written)+" locks de "+lockName+" tirés au hasard autour de la valeur actuelle.");
+        }else if(choice==15){
+            static const int minor[]={0,3,5,7,10,12};int written=0;
+            for(int i=0;i<length;++i){if(!steps[size_t(i)].trig||random01()>.7)continue;const int semis=minor[std::uniform_int_distribution<int>(0,5)(rng)];
+                if(isMidi(t)){TrigStep st=steps[size_t(i)];st.note=int8_t(std::clamp(int(current().defaultNote)+semis,0,127));engine.trigSetStep(t,i,st);}
+                else engine.trigSetLock(t,i,TrigPitch,(semis+24)/48.);++written;}
+            changed();refresh();status(std::to_string(written)+" hauteurs tirées dans la gamme mineure.");
+        }else if(choice>=17&&choice<=18){
+            std::vector<TrigStep> out(static_cast<size_t>(length));const int shift=choice==17?1:length-1;for(int i=0;i<length;++i)out[size_t((i+shift)%length)]=steps[size_t(i)];
+            writeSteps(out);status("Piste décalée.");
+        }else if(choice==19){std::reverse(steps.begin(),steps.end());writeSteps(steps);status("Pas inversés.");}
+        ui.latched.clear();
+    }
     void exportWav(){
+        const int cycles=askCycles();if(!cycles)return;
         const auto chosen=host.savePath("Exporter le pattern en WAV","wav",patternName(snap->sequence)+".wav");if(chosen.empty())return;
-        host.stopAudio();std::string error;const bool ok=engine.exportCurrentPatternWav(chosen,error);host.startAudio();
-        status(ok?"WAV exporté (48 kHz / 24 bits, un cycle du pattern) : "+std::filesystem::u8path(chosen).filename().u8string():"Export impossible : "+error);
+        host.stopAudio();std::string error;const bool ok=engine.exportCurrentPatternWav(chosen,error,cycles);host.startAudio();
+        status(ok?"WAV exporté (48 kHz / 24 bits, "+std::to_string(cycles)+" cycle(s)) : "+std::filesystem::u8path(chosen).filename().u8string():"Export impossible : "+error);
     }
 
     // ----- menus -----
     void fileMenu(){
-        const int choice=host.popup({{"Nouveau projet"},{"Ouvrir un projet ELEKTAKT…"},{"Enregistrer"},{"Enregistrer sous…"},{"",false,true,true},{"Importer un projet KICK (.kicklab)…"},{"",false,true,true},{"Charger un kit…"},{"Enregistrer le kit…"},{"",false,true,true},{"Exporter le pattern en WAV…"},{"",false,true,true},{"Quitter"}});
+        const int choice=host.popup({{"Nouveau projet"},{"Ouvrir un projet ELEKTAKT…"},{"Enregistrer"},{"Enregistrer sous…"},{"",false,true,true},{"Importer un projet KICK (.kicklab)…"},{"",false,true,true},{"Charger un kit…"},{"Enregistrer le kit…"},{"",false,true,true},{"Exporter le pattern en WAV…"},{"Exporter les pistes séparées (stems WAV)…"},{"",false,true,true},{"Quitter"}});
         switch(choice){
         case 0:newProject();break;case 1:openProject("project");break;case 2:saveProject(false);break;case 3:saveProject(true);break;
         case 5:openProject("kick");break;
         case 7:{const auto chosen=host.openPath("Charger un kit","kit");if(chosen.empty())break;std::string error;if(engine.openKit(chosen,(base/"samples").u8string(),error)){changed();status("Kit chargé : "+fileStem(chosen));}else status("Kit illisible : "+error);break;}
         case 8:{const auto chosen=host.savePath("Enregistrer le kit","kit","kit.kickkit");if(chosen.empty())break;std::string error;status(engine.saveKit(chosen,(base/"samples").u8string(),error)?"Kit enregistré.":"Impossible : "+error);break;}
-        case 10:exportWav();break;case 12:host.quit();break;default:break;
+        case 10:exportWav();break;case 11:exportStems();break;case 13:host.quit();break;default:break;
         }
     }
     void deviceMenu(const std::vector<std::string>& names,int current,const std::string& none,std::function<void(int)> select){
@@ -427,7 +509,7 @@ struct TrigUI::Impl {
         p.text(r.x+6,r.y+10,r.w-12,20,k.label,13,k.enabled?(marked?mark:Muted):Dim,Align::Center,true);
         const bool large=r.h>180;const int cx=r.x+r.w/2,cy=r.y+(large?92:70),radius=large?42:32;
         p.arc(cx,cy,radius,135,270,Line,8);
-        if(k.enabled){const Color c=marked?mark:(ui.page==0?Yellow:(k.kind>=3?Orange:Blue));p.arc(cx,cy,radius,135,std::max(1.,270*k.value),c,8);
+        if(k.enabled){const Color c=marked?mark:(k.kind==2?Yellow:(k.kind>=3?Orange:Blue));p.arc(cx,cy,radius,135,std::max(1.,270*k.value),c,8);
             const double angle=(135+270*k.value)*3.14159265/180.;p.line(cx,cy,cx+int(std::cos(angle)*(radius-14)),cy+int(std::sin(angle)*(radius-14)),Ink,3);}
         p.disc(cx,cy,7,k.enabled?Ink:Dim);
         p.text(r.x+4,r.y+r.h-(large?50:44),r.w-8,24,k.display,large?16:14,k.enabled?Ink:Dim,Align::Center,true);
@@ -530,7 +612,8 @@ struct TrigUI::Impl {
         for(int page=0;page<4;++page){const auto r=stepPageRect(page);const bool usable=page<pages();button(p,r,std::to_string(page*16+1)+"–"+std::to_string(page*16+16),ui.stepPage==page,Blue,12,usable);if(playStep>=0&&playStep/16==page)p.fill(r.x+8,r.y+r.h-4,r.w-16,3,Green);}
         button(p,FollowRect,"SUIVRE",follow,Green,12);
         button(p,PageCopy,"COPIER PAGE",false,Blue,11);button(p,PagePaste,"COLLER PAGE",false,Blue,11,pageClipboard!=nullptr);
-        p.text(MainX+762,PagesY,446,30,"Clic = trig · Clic droit = sélection pour lock · Ctrl+Z annuler",11,Muted,Align::Left);
+        button(p,Generate,"GÉNÉRER ▾",false,Orange,11);
+        p.text(MainX+898,PagesY,310,30,"Clic droit = sélection pour lock · Ctrl+Z annuler",11,Muted,Align::Left);
         // Steps
         const Color trigColor=isMidi(sel)?Yellow:Blue;
         for(int i=0;i<16;++i){
@@ -640,6 +723,7 @@ struct TrigUI::Impl {
         if(FollowRect.in(x,y)){follow=!follow;saveSettings();return;}
         if(PageCopy.in(x,y)){copyPage();return;}
         if(PagePaste.in(x,y)){pastePage();return;}
+        if(Generate.in(x,y)){generateMenu();return;}
         const int step=stepAt(x,y);
         if(step>=0){
             if(step>=current().length)return;
