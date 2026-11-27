@@ -88,7 +88,7 @@ struct TrigUI::Impl {
     Impl(TrigUI& owner,Engine& e,Host& h,std::filesystem::path dir):ui(owner),engine(e),host(h),base(std::move(dir)){loadSettings();}
 
     // ----- state helpers -----
-    void refresh(){*snap=engine.snapshot();playing=snap->playing;if(undoCheck){undoCheck=false;trackUndo();}else if(committedSequence!=snap->sequence)commit();}
+    void refresh(){engine.snapshotTo(*snap);playing=snap->playing;if(undoCheck){undoCheck=false;trackUndo();}else if(committedSequence!=snap->sequence)commit();}
     // ----- undo: the sequencer data of the current pattern is versioned -----
     static bool sameStep(const TrigStep& a,const TrigStep& b){
         if(a.trig!=b.trig||a.note!=b.note||a.velocity!=b.velocity||a.length!=b.length||a.probability!=b.probability||a.condition!=b.condition||a.micro!=b.micro||a.retrig!=b.retrig||a.slide!=b.slide||a.lockCount!=b.lockCount)return false;
@@ -115,7 +115,7 @@ struct TrigUI::Impl {
         refresh();auto entry=std::move(from.back());from.pop_back();
         if(entry.first!=snap->sequence){engine.selectSequence(entry.first);refresh();}
         to.emplace_back(snap->sequence,pattern());engine.trigSetPattern(entry.first,entry.second);ui.latched.clear();
-        *snap=engine.snapshot();commit();ui.dirty=true;updateTitle();status(redo?"Rétabli.":"Annulé (Ctrl+Y pour rétablir).");
+        engine.snapshotTo(*snap);commit();ui.dirty=true;updateTitle();status(redo?"Rétabli.":"Annulé (Ctrl+Y pour rétablir).");
     }
     const TrigPattern& pattern()const{return snap->sequences[snap->sequence].trig;}
     const TrigTrack& track(int t)const{return pattern().tracks[std::clamp(t,0,TrigTracks-1)];}
@@ -383,7 +383,7 @@ struct TrigUI::Impl {
         const int cycles=askCycles();if(!cycles)return;
         const auto chosen=host.savePath("Exporter les stems : choisis le dossier et le nom de base","wav",patternName(snap->sequence)+".wav");if(chosen.empty())return;
         auto basePath=std::filesystem::u8path(chosen);const auto folder=basePath.parent_path();const auto stem=basePath.stem().u8string();
-        const auto seq=snap->sequences[snap->sequence];std::vector<int> used;
+        std::array<bool,TrigTracks> wasMuted{},wasSolo{};for(int u=0;u<TrigTracks;++u){wasMuted[size_t(u)]=snap->sequences[snap->sequence].tracks[u].mute;wasSolo[size_t(u)]=snap->sequences[snap->sequence].tracks[u].solo;}std::vector<int> used;
         for(int t=0;t<TrigTracks;++t){if(isMidi(t))continue;bool any=false;for(const auto& st:track(t).steps)any=any||st.trig;if(any)used.push_back(t);}
         if(used.empty()){status("Aucune piste son avec des trigs dans ce pattern.");return;}
         host.stopAudio();std::string error;int written=0;
@@ -395,7 +395,7 @@ struct TrigUI::Impl {
             const auto file=folder/std::filesystem::u8path(stem+"-T"+number+"-"+clean(trackName(t))+".wav");
             if(engine.exportCurrentPatternWav(file.u8string(),error,cycles))++written;else ok=false;
         }
-        for(int u=0;u<TrigTracks;++u){engine.setTrackSolo(u,seq.tracks[size_t(u)].solo);engine.setTrackMute(u,seq.tracks[size_t(u)].mute);}
+        for(int u=0;u<TrigTracks;++u){engine.setTrackSolo(u,wasSolo[size_t(u)]);engine.setTrackMute(u,wasMuted[size_t(u)]);}
         host.startAudio();refresh();
         status(ok?std::to_string(written)+" fichiers WAV exportés dans "+folder.filename().u8string()+" (mix + une piste par son, 48 kHz / 24 bits).":"Export incomplet : "+error);
     }
@@ -466,7 +466,7 @@ struct TrigUI::Impl {
 
     // ----- menus -----
     void fileMenu(){
-        const int choice=host.popup({{"Nouveau projet"},{"Ouvrir un projet ELEKTAKT…"},{"Enregistrer"},{"Enregistrer sous…"},{"",false,true,true},{"Importer un projet KICK (.kicklab)…"},{"",false,true,true},{"Charger un kit…"},{"Enregistrer le kit…"},{"",false,true,true},{"Exporter le pattern en WAV…"},{"Exporter les pistes séparées (stems WAV)…"},{"",false,true,true},{"Quitter"}});
+        const int choice=host.popup({{"Nouveau projet"},{"Ouvrir un projet ELEKTAKT…"},{"Enregistrer"},{"Enregistrer sous…"},{"",false,true,true},{"Importer un projet KICK (.kicklab)…"},{"",false,true,true},{"Charger un kit…"},{"Enregistrer le kit…"},{"",false,true,true},{"Exporter le pattern en WAV…"},{"Exporter les pistes séparées (stems WAV)…"},{"",false,true,true},{"Quitter",false,!host.isPlugin()}});
         switch(choice){
         case 0:newProject();break;case 1:openProject("project");break;case 2:saveProject(false);break;case 3:saveProject(true);break;
         case 5:openProject("kick");break;
@@ -480,6 +480,13 @@ struct TrigUI::Impl {
         const int choice=host.popup(items);if(choice<0)return;select(choice-1);
     }
     void settingsMenu(){
+        if(host.isPlugin()){
+            const int choice=host.popup({{"Sortie des pistes MIDI…"},{"",false,true,true},{"Notes reçues de Live : la piste sélectionnée en chromatique",!padMode},{"Notes reçues de Live : pads 36–51 → pistes 1–16",padMode},{"",false,true,true},{"Suivre la tête de lecture",follow}});
+            if(choice==0)deviceMenu(host.midiOutputs(),host.midiOutput(),"Aucune sortie MIDI",[&](int i){host.selectMidiOutput(i);});
+            else if(choice==2||choice==3){padMode=choice==3;saveSettings();}
+            else if(choice==5){follow=!follow;saveSettings();}
+            return;
+        }
         const int choice=host.popup({{"Sortie audio…"},{"Entrée MIDI (clavier / pads / potards)…"},{"Sortie MIDI vers Ableton…"},{"",false,true,true},{"Entrée MIDI : la piste sélectionnée en chromatique",!padMode},{"Entrée MIDI : pads, notes 36–51 → pistes 1–16 (MPK mini, LPD8…)",padMode},{"",false,true,true},{"Suivre la tête de lecture",follow}});
         if(choice==0){const auto outs=host.audioOutputs();std::vector<MenuItem> items{{"Sortie Windows par défaut",host.audioOutput()<0}};for(size_t i=0;i<outs.size();++i)items.push_back({outs[i],int(i)==host.audioOutput()});const int pick=host.popup(items);if(pick>=0)host.selectAudioOutput(pick-1);}
         else if(choice==1)deviceMenu(host.midiInputs(),host.midiInput(),"Aucune entrée MIDI",[&](int i){host.selectMidiInput(i);});
@@ -489,7 +496,7 @@ struct TrigUI::Impl {
     }
     void trackMenu(int t){
         selectTrack(t);const bool midi=isMidi(t);const auto& seq=snap->sequences[snap->sequence];
-        const int choice=host.popup({{"Piste SON (sample)",!midi},{"Piste MIDI (vers Ableton)",midi},{"",false,true,true},{"Charger un sample…",false,!midi},{"Canal MIDI…",false,midi},{"",false,true,true},{"Muet",seq.tracks[t].mute},{"Solo",seq.tracks[t].solo},{"",false,true,true},{"Copier la piste"},{"Coller la piste",false,trackClipboard!=nullptr},{"Effacer les pas de la piste"},{"",false,true,true},{"Rééchantillonner le pattern sur cette piste…"},{"Découper son sample (chop)…",false,!midi}});
+        const int choice=host.popup({{"Piste SON (sample)",!midi},{"Piste MIDI (vers Ableton)",midi},{"",false,true,true},{"Charger un sample…",false,!midi},{"Canal MIDI…",false,midi},{"",false,true,true},{"Muet",seq.tracks[t].mute},{"Solo",seq.tracks[t].solo},{"",false,true,true},{"Copier la piste"},{"Coller la piste",false,trackClipboard!=nullptr},{"Effacer les pas de la piste"},{"",false,true,true},{"Rééchantillonner le pattern sur cette piste…"},{"Découper son sample (chop)…",false,!midi},{"",false,true,true},{"Sortie audio de la piste…",false,!midi&&host.outputCount()>1}});
         TrigTrack config=current();
         switch(choice){
         case 0:setType(t,TrigTrackType::Audio);break;
@@ -503,9 +510,15 @@ struct TrigUI::Impl {
         case 11:engine.trigClearTrack(t);ui.latched.clear();changed();status("Pas de la piste effacés.");break;
         case 13:resample();break;
         case 14:chop(false);break;
+        case 16:outputMenu(t);break;
         default:break;
         }
         refresh();
+    }
+    void outputMenu(int t){
+        std::vector<MenuItem> items{{"Sortie principale (mix)",snap->trackOutput[size_t(t)]==0}};for(int o=1;o<host.outputCount();++o)items.push_back({"Sortie "+std::to_string(o+1)+" (piste Ableton séparée)",snap->trackOutput[size_t(t)]==o});
+        const int choice=host.popup(items);if(choice<0)return;engine.setTrackOutput(t,choice);changed();refresh();
+        status(choice==0?"Piste "+std::to_string(t+1)+" dans le mix principal.":"Piste "+std::to_string(t+1)+" → Sortie "+std::to_string(choice+1)+" : dans Live, crée une piste audio et choisis ELEKTAKT / Sortie "+std::to_string(choice+1)+" en entrée.");
     }
     void channelMenu(int t){std::vector<MenuItem> items;for(int c=0;c<16;++c)items.push_back({"Canal "+std::to_string(c+1),track(t).midiChannel==c});const int choice=host.popup(items);if(choice<0)return;TrigTrack config=track(t);config.midiChannel=uint8_t(choice);engine.trigSetTrackConfig(t,config);changed();refresh();}
     void loadSample(int t){const auto chosen=host.openPath("Charger un sample WAV","wav");if(!chosen.empty())loadSampleFile(t,chosen);}
@@ -653,13 +666,13 @@ struct TrigUI::Impl {
         button(p,HeaderPlay,"▶ PLAY",snap->playing,Green,15);
         button(p,HeaderStop,"■ STOP",false);
         button(p,HeaderRec,"● REC",record,Red);
-        char text[64];std::snprintf(text,sizeof(text),"%.1f",snap->tempo);valueBox(p,HeaderTempo,"TEMPO BPM",text);
+        char text[64];std::snprintf(text,sizeof(text),"%.1f",snap->tempo);valueBox(p,HeaderTempo,host.isPlugin()?"TEMPO (LIVE)":"TEMPO BPM",text);
         valueBox(p,HeaderSwing,"SWING",std::to_string(pat.swing)+" %");
         valueBox(p,HeaderMaster,"LONG. MAÎTRE",pat.masterLength==0?"INF":std::to_string(pat.masterLength)+" pas");
         button(p,HeaderFill,"FILL",snap->fill,Yellow);
-        button(p,HeaderClock,"CLOCK OUT",snap->midiClockOut,Blue,13);
+        if(host.isPlugin())button(p,HeaderClock,"SYNC LIVE",true,Green,13);else button(p,HeaderClock,"CLOCK OUT",snap->midiClockOut,Blue,13);
         const auto outs=host.midiOutputs();const int out=host.midiOutput();
-        valueBox(p,HeaderMidiOut,"SORTIE MIDI (vers Ableton)",out>=0&&out<int(outs.size())?outs[size_t(out)]:"aucune — clic pour choisir",out>=0?Blue:Muted);
+        valueBox(p,HeaderMidiOut,host.isPlugin()?"SORTIE DES PISTES MIDI":"SORTIE MIDI (vers Ableton)",out>=0&&out<int(outs.size())?outs[size_t(out)]:"aucune — clic pour choisir",out>=0?Blue:Muted);
         button(p,HeaderFile,"FICHIER",false);button(p,HeaderSettings,"RÉGLAGES",false);
         // Patterns
         p.text(16,PatternY,90,PatternH,"PATTERN",13,Muted,Align::Left,true);
@@ -685,7 +698,7 @@ struct TrigUI::Impl {
             const auto play=trackPlay(t);p.round(play.x,play.y,play.w,play.h,6,snap->trigFlash[t]?typeColor:mix(Panel2,typeColor,.25));
             p.text(play.x,play.y,play.w,play.h,std::to_string(t+1),14,snap->trigFlash[t]?Bg:Ink,Align::Center,true);
             p.text(r.x+46,r.y+4,190,20,trackName(t),14,silent?Dim:Ink,Align::Left,true);
-            const auto& tt=track(t);p.text(r.x+46,r.y+23,200,16,std::string(midi?"MIDI":"SON")+" · "+std::to_string(tt.length)+" pas · "+trigSpeedName(tt.speed),11,midi?Yellow:Muted,Align::Left);
+            const auto& tt=track(t);p.text(r.x+46,r.y+23,200,16,std::string(midi?"MIDI":"SON")+" · "+std::to_string(tt.length)+" pas · "+trigSpeedName(tt.speed)+(!midi&&snap->trackOutput[size_t(t)]>0?" · → S"+std::to_string(snap->trackOutput[size_t(t)]+1):""),11,midi?Yellow:Muted,Align::Left);
             button(p,trackMute(t),"M",seq.tracks[t].mute,Red,13);button(p,trackSolo(t),"S",seq.tracks[t].solo,Yellow,13);
         }
         // Track header
@@ -763,7 +776,7 @@ struct TrigUI::Impl {
         // Status bar
         p.fill(0,DesignHeight-30,DesignWidth,30,Panel);p.line(0,DesignHeight-30,DesignWidth,DesignHeight-30,Line);
         p.text(16,DesignHeight-30,1180,30,ui.status,12,Ink,Align::Left);
-        std::string right=std::string(record?"REC armé · ":"")+(snap->songPlaying?"SONG · ":"")+"Espace = play/stop · F = fill · ←/→ pages · ↑/↓ pistes";
+        std::string right=std::string(record?"REC armé · ":"")+(snap->songPlaying?"SONG · ":"")+(host.isPlugin()?"F = fill · ←/→ pages · ↑/↓ pistes · lecture = transport de Live":"Espace = play/stop · F = fill · ←/→ pages · ↑/↓ pistes");
         p.text(1000,DesignHeight-30,584,30,right,11,Muted,Align::Right);
     }
 
@@ -777,6 +790,7 @@ struct TrigUI::Impl {
     void mouseDown(int x,int y,int button,int modifiers){
         refresh();mouseX=x;mouseY=y;const bool right=button==1;const int sel=ui.selectedTrack;gestureOpen=!right;gesturePushed=false;gesture=right?"":"mouse";
         if(!right){
+            if(host.isPlugin()&&(HeaderPlay.in(x,y)||HeaderStop.in(x,y)||HeaderClock.in(x,y)||HeaderTempo.in(x,y))){status("Dans Ableton, la lecture et le tempo suivent Live : lance la lecture dans Live.");return;}
             if(HeaderPlay.in(x,y)){togglePlay();return;}
             if(HeaderStop.in(x,y)){stop();return;}
             if(HeaderRec.in(x,y)){record=!record;status(record?"REC armé : joue avec ton clavier MIDI ou les numéros de piste pendant la lecture.":"REC désarmé.");return;}
@@ -869,7 +883,7 @@ struct TrigUI::Impl {
         refresh();gestureOpen=false;const bool fine=(modifiers&ModShift)!=0;gesture="wheel "+std::to_string(x/40)+","+std::to_string(y/40);
         if(browserOpen&&BrowserPanel.in(x,y)){browserScroll=std::clamp(browserScroll-delta*3,0,std::max(0,int(browserFiles.size())-BrowserRows));return;}
         if(sceneView&&Rect{Crossfader.x-20,Crossfader.y,Crossfader.w+40,Crossfader.h}.in(x,y)){setFader(snap->crossfader+delta*(fine?.01:.05));return;}
-        if(HeaderTempo.in(x,y)){engine.setTempo(snap->tempo+delta*(fine?.1:1.));changed();return;}
+        if(HeaderTempo.in(x,y)){if(!host.isPlugin()){engine.setTempo(snap->tempo+delta*(fine?.1:1.));changed();}return;}
         if(HeaderSwing.in(x,y)){engine.trigSetSwing(pattern().swing+delta);changed();return;}
         if(HeaderMaster.in(x,y)){engine.trigSetMasterLength(pattern().masterLength+delta);changed();return;}
         if(TrackLength.in(x,y)){setTrackLength(current().length+delta);return;}
@@ -897,7 +911,7 @@ struct TrigUI::Impl {
             return;
         }
         switch(code){
-        case KeySpace:togglePlay();break;
+        case KeySpace:if(!host.isPlugin())togglePlay();break;
         case KeyEscape:if(browserOpen){closeBrowser();break;}ui.latched.clear();if(editScene>=0){editScene=-1;status("Édition de scène terminée.");}else status("Sélection relâchée.");break;
         case KeyDelete:case KeyBack:clearLatchedLocks();break;
         case KeyLeft:ui.stepPage=std::max(0,ui.stepPage-1);break;
@@ -925,6 +939,8 @@ struct TrigUI::Impl {
     }
     void tick(){
         ++tickCount;refresh();
+        ui.liveTrack=ui.selectedTrack;ui.livePads=padMode;ui.liveRecord=record;
+        if(ui.liveRecorded.exchange(false))changed();
         if(follow&&snap->playing){const int step=snap->trigPlayStep[ui.selectedTrack];if(step>=0&&paintStep<0)ui.stepPage=std::clamp(step/16,0,pages()-1);}
     }
 };
@@ -940,6 +956,13 @@ void TrigUI::key(int c,bool d,int m){impl->key(c,d,m);}
 void TrigUI::midiIn(unsigned packed){impl->midiIn(packed);}
 void TrigUI::tick(){impl->tick();}
 bool TrigUI::wantsClose(){return impl->confirmDiscard();}
+void TrigUI::audioThreadNote(unsigned packed){
+    const int type=packed&0xF0,note=(packed>>8)&127,velocity=(packed>>16)&127;if(type!=0x90&&type!=0x80)return;
+    const bool pressed=type==0x90&&velocity>0;const bool rec=liveRecord.load();
+    if(livePads&&note>=36&&note<36+lab::TrigTracks)impl->engine.trigPlayLive(note-36,-1,pressed?velocity:64,pressed,rec);
+    else impl->engine.trigPlayLive(liveTrack.load(),note,pressed?velocity:64,pressed,rec);
+    if(pressed&&rec)liveRecorded=true;
+}
 void TrigUI::dropFile(int x,int y,const std::string& path){
     impl->refresh();int target=selectedTrack;for(int t=0;t<TrigTracks;++t)if(trackRect(t).in(x,y))target=t;
     const auto extension=std::filesystem::u8path(path).extension().u8string();std::string lower=extension;for(auto& c:lower)c=char(std::tolower(static_cast<unsigned char>(c)));
@@ -961,6 +984,6 @@ void TrigUI::loadDemo(){
     const int notes[4]={0,3,7,10};for(int i=0;i<4;++i){e.trigToggle(12,i*3);e.trigSetLock(12,i*3,TrigPitch,(notes[i]+24)/48.);}
     e.trigSetLock(12,9,TrigDecay,.35);
     impl->refresh();dirty=false;impl->updateTitle();
-    status="Pattern de démo : grosse caisse, caisse claire avec FILL, charleston à 70 %, basse sur 12 pas avec locks de hauteur. Espace pour jouer.";
+    status="Pattern de démo : grosse caisse, caisse claire avec FILL, charleston à 70 %, basse sur 12 pas avec locks de hauteur. "+std::string(impl->host.isPlugin()?"Lance la lecture dans Live.":"Espace pour jouer.");
 }
 }

@@ -4,6 +4,7 @@
 #pragma once
 #include "engine.hpp"
 #include <array>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -39,6 +40,9 @@ struct Host {
     virtual std::vector<std::string> midiOutputs()=0; virtual int midiOutput()=0; virtual void selectMidiOutput(int index)=0;
     virtual void stopAudio()=0; virtual void startAudio()=0;
     virtual void quit()=0;
+    // Plugin: transport comes from the host, audio leaves through the host.
+    virtual bool isPlugin()const{return false;}
+    virtual int outputCount()const{return 1;}   // stereo outputs offered to tracks
 };
 enum Key { KeySpace=32, KeyEscape=27, KeyDelete=127, KeyBack=8, KeyEnter=13, KeyLeft=1000, KeyRight, KeyUp, KeyDown, KeyF1 };
 enum Modifier { ModShift=1, ModControl=2 };
@@ -63,6 +67,9 @@ public:
     int selectedTrack=0,page=0,stepPage=0;
     std::vector<int> latched;          // latched steps of the selected track (absolute indices)
     bool dirty=false;
+    // Plugin audio thread: plays MIDI notes from the host without touching the interface.
+    void audioThreadNote(unsigned packed);
+    std::atomic<int> liveTrack{0};std::atomic<bool> livePads{false},liveRecord{false},liveRecorded{false};
 private:
     struct Impl; std::unique_ptr<Impl> impl;
 };

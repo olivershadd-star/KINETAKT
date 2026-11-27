@@ -31,11 +31,11 @@ jobs:
           "publish=$(if ($exists -or '${{ github.event_name }}' -eq 'pull_request') { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
           Write-Host "Version $version — publish: $(-not $exists)"
 
-      - name: Configure x64
-        run: cmake -S . -B build -A x64
+      - name: Configure x64 (application + VST3)
+        run: cmake -S . -B build -A x64 -DELEKTAKT_PLUGIN=ON -DELEKTAKT_PLUGIN_TEST=ON
 
       - name: Build
-        run: cmake --build build --config Release --parallel 2
+        run: cmake --build build --config Release --parallel 4
 
       - name: Test sequencer engine
         run: ctest --test-dir build -C Release --output-on-failure
@@ -47,6 +47,21 @@ jobs:
           if (-not $process.WaitForExit(60000)) { $process.Kill(); throw "ELEKTAKT did not close by itself" }
           if ($process.ExitCode -ne 0) { throw "ELEKTAKT exited with $($process.ExitCode)" }
 
+      - name: Test the VST3 in a minimal host (44.1 / 48 / 96 kHz, sync, state, editor)
+        shell: pwsh
+        run: |
+          $host_exe = Get-ChildItem build -Recurse -Filter "ELEKTAKT*PluginHostTest*.exe" | Select-Object -First 1
+          & $host_exe.FullName "build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3"
+          if ($LASTEXITCODE -ne 0) { throw "Plugin host test failed" }
+
+      - name: Validate the VST3 with pluginval
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval -Force
+          & ./pluginval/pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 600000 --output-dir pluginval-logs "build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3"
+          if ($LASTEXITCODE -ne 0) { Get-ChildItem pluginval-logs -Recurse | Get-Content -Tail 80; throw "pluginval failed" }
+
       - name: Assemble portable ZIP
         if: steps.version.outputs.publish == 'true'
         shell: pwsh
@@ -55,6 +70,8 @@ jobs:
           $folder = "dist/ELEKTAKT-Windows-x64-$version"
           New-Item -ItemType Directory -Force "$folder/demo-kit","$folder/samples","$folder/projets" | Out-Null
           Copy-Item build/Release/ELEKTAKT.exe "$folder/"
+          New-Item -ItemType Directory -Force "$folder/VST3" | Out-Null
+          Copy-Item -Recurse build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3 "$folder/VST3/"
           Copy-Item demo-kit/*.wav "$folder/demo-kit/"
           Copy-Item LIRE-MOI.txt,README.md,CHANGELOG.md,NOTICES.txt,LICENSE "$folder/"
           Compress-Archive -Path $folder -DestinationPath "dist/ELEKTAKT-Windows-x64-$version.zip" -Force
@@ -71,7 +88,9 @@ jobs:
           body: |
             **ELEKTAKT — séquenceur à la Elektron, ANKS Labs.**
 
-            Télécharge `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous, extrais-le entièrement et lance `ELEKTAKT.exe`.
+            Télécharge `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous et extrais-le entièrement.
+            - **Application** : lance `ELEKTAKT.exe`.
+            - **Plugin VST3 pour Ableton** : copie le dossier `VST3/ELEKTAKT.vst3` dans `C:\Program Files\Common Files\VST3`, puis relance l'analyse des plugins dans Live.
             Aucune installation. Pour envoyer le MIDI vers Ableton, installe loopMIDI (gratuit) — voir le README.
             Nouveautés : voir CHANGELOG.md (aussi dans le ZIP).
 

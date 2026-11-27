@@ -20,7 +20,14 @@ DÉMARRER
 14. SONS : parcours tes WAV (clic = écouter, double-clic = charger), rééchantillonne le pattern
     sur une piste puis DÉCOUPE-le en tranches jouées par les pas.
 
-ENVOYER LE MIDI VERS ABLETON (pistes MIDI + horloge)
+PLUGIN VST3 DANS ABLETON
+1. Copie le dossier VST3\ELEKTAKT.vst3 dans C:\Program Files\Common Files\VST3
+2. Live : Préférences > Plug-ins > Dossier système VST3 = On, puis Relancer l'analyse.
+3. Plug-ins > ANKS Labs > ELEKTAKT sur une piste MIDI. La lecture suit Live.
+4. Sorties séparées : clic droit sur une piste d'ELEKTAKT > Sortie audio de la piste.
+   Dans Live, piste audio > Audio From = piste ELEKTAKT > ELEKTAKT / Sortie n.
+
+ENVOYER LE MIDI VERS ABLETON DEPUIS L'APPLICATION (pistes MIDI + horloge)
 1. Installe loopMIDI (gratuit) : https://www.tobias-erichsen.de/software/loopmidi.html
    et crée un port (bouton +).
 2. Dans ELEKTAKT : SORTIE MIDI > choisis le port loopMIDI.

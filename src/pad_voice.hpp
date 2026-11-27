@@ -244,6 +244,9 @@ public:
     }
     void stop(){AudIO::AudioPlayback::stop();tail=0;envelope=0;envelopeStage=EnvelopeStage::Idle;}
     void resetMix(){gain=edit.gain;tail=0;envelope=0;envelopeStage=EnvelopeStage::Idle;}
+    // Plugin multi-out: the last block of this pad, and whether it leaves the main mix.
+    bool direct=false;
+    std::array<std::array<float,lab::Block>,2> capture{};
     void setTrackMix(double levelValue,double panValue){trackLevel=std::clamp(levelValue,0.,1.);trackPan=std::clamp(panValue,-1.,1.);}
     float outputPeak()const{return meterPeak;}
 protected:
@@ -266,6 +269,7 @@ protected:
             out[0][n]=(tail>0||sounded)?float(out[0][n]*gain*velocityGain*left):0.f;
             out[1][n]=(tail>0||sounded)?float(out[1][n]*gain*velocityGain*right):0.f;
             meterPeak=std::max(meterPeak,std::max(std::abs(out[0][n]),std::abs(out[1][n])));}
+        for(int c=0;c<2;++c){std::copy(out[c],out[c]+lab::Block,capture[size_t(c)].begin());if(direct)std::fill(out[c],out[c]+lab::Block,0.f);}
     }
 private:
     enum class EnvelopeStage { Idle,Attack,Decay,Sustain,Release };

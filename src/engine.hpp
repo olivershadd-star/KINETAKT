@@ -268,6 +268,8 @@ struct Snapshot {
     bool fill=false,midiClockOut=true;
     double crossfader=0;      // 0 = scene A, 1 = scene B
     std::array<double,TrigTracks> trigLfo{};   // current LFO outputs (−1..1), for display
+    std::array<uint8_t,TrigTracks> trackOutput{}; // plugin: 0 = main mix, 1–8 = separate outputs 2–9
+    bool hostSync=false;
 };
 class Engine {
 public:
@@ -355,6 +357,7 @@ public:
     void setRepeatVoice(int pad,int semitones,bool held);
     void holdArpeggioNote(int sourcePad,int note,bool held);
     Snapshot snapshot();
+    void snapshotTo(Snapshot& target);
     // Exactly Block stereo frames; UI waveform copies do not hold render locks.
     void render(float* interleaved);
     bool save(const std::string&,std::string& error);
@@ -401,6 +404,15 @@ public:
     void trigSetSceneAB(int a,int b);
     void setCrossfader(double position);
     void trigSetLfo(int track,const TrigLfo& lfo);
+    // ----- plugin host -----
+    // When synced, the host transport drives play/stop, tempo and position.
+    void setHostSync(bool enabled);
+    void setHostTransport(bool playing,double quarterNotes,double bpm);
+    void setMultiOut(bool enabled);
+    void setTrackOutput(int track,int output);    // 0 = main, 1–8 = separate outputs
+    // Copies the last rendered block of a pad (Block frames per channel).
+    void trackBlock(int pad,float* left,float* right)const;
+    std::array<uint8_t,TrigTracks> trackOutputs();
 private:
     bool openKick(const std::string&,std::string& error);
     struct Impl; std::unique_ptr<Impl> impl;

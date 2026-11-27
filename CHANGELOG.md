@@ -1,5 +1,16 @@
 # ELEKTAKT — versions
 
+## 0.6.0
+- **Plugin VST3 pour Ableton Live** (éditeur ANKS Labs), avec la même interface que l'application :
+  - synchronisé sur Live : lecture, tempo, position et boucles ;
+  - 44,1 / 48 / 96 kHz (conversion interne) ;
+  - **8 sorties stéréo séparées** en plus de la sortie principale, au choix par piste ;
+  - pistes MIDI vers Live (un canal) ou vers un port loopMIDI (multicanal) ;
+  - notes reçues de Live : piste sélectionnée ou mode pads, enregistrement REC ;
+  - tout le projet est sauvegardé dans le set Live ; kit démo et samples dans Documents\ELEKTAKT.
+- Vérifié automatiquement à chaque version : hôte de test (lecture synchronisée, arrêt, sauvegarde / rechargement, éditeur) et **pluginval**.
+- Moteur : l'interface n'utilise plus de grosses copies sur la pile (nécessaire dans un plugin).
+
 ## 0.5.0
 - **Navigateur SONS** : kit démo, dossier `samples` ou un dossier de ton choix (mémorisé), écoute au clic, chargement au double-clic.
 - **Rééchantillonnage** : le pattern (1 à 8 cycles) devient un WAV dans `samples` et se charge sur la piste choisie.

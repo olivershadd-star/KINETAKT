@@ -215,14 +215,22 @@ void Engine::Impl::trigSchedule(double from,double to,bool anySolo){
         }
     }
 }
+void Engine::Impl::trigReposition(double steps){
+    const auto& pattern=state.sequences[state.sequence].trig;trigPos=steps;
+    if(pattern.masterLength>0){trigOrigin=std::floor(steps/pattern.masterLength)*pattern.masterLength;trigNextBoundary=trigOrigin+pattern.masterLength;}
+    else{trigOrigin=0;trigNextBoundary=(std::floor(steps/16.)+1.)*16.;}
+    clockPhase=std::ceil(steps*6.)/6.;glideCount.fill(0);
+}
 void Engine::Impl::trigRender(bool anySolo){
     auto& s=state;
+    if(s.hostSync){s.tempo=std::clamp(hostBpm,20.,400.);if(hostPlaying&&!s.playing)s.playing=true;else if(!hostPlaying&&s.playing){s.playing=false;s.songPlaying=false;}}
     samplesPerStep=Rate*60./s.tempo/4.;blockFrame=frames;
     for(int p=0;p<Pads;++p)if(gateSamples[p]>0){gateSamples[p]-=Block;if(gateSamples[p]<=0&&banks[s.program][p].edit.samplePlay==SamplePlayType::NoteOn)players[p]->release();}
     for(int t=0;t<TrigTracks;++t){if(trigFlashBlocks[t]>0)--trigFlashBlocks[t];s.trigFlash[t]=trigFlashBlocks[t]>0;}
     trigLive();
     if(!s.playing){if(trigWasPlaying)trigStopped(frames);return;}
-    if(!trigWasPlaying)trigStart();
+    if(!trigWasPlaying){trigStart();if(s.hostSync)trigReposition(hostSteps);}
+    else if(s.hostSync&&std::abs(trigPos-hostSteps)>.05)trigReposition(hostSteps); // loop or jump in the host
     const double a=trigPos,b=trigPos+Block/samplesPerStep;blockStartSteps=a;
     if(s.midiClockOut)while(clockPhase<b){pushMidi(blockFrame+uint64_t(std::max(0.,(clockPhase-a)*samplesPerStep)),0xF8);clockPhase+=1./6.;}
     double cursor=a;
@@ -389,6 +397,17 @@ void Engine::trigSetLfo(int track,const TrigLfo& requested){
     if(lfo.destination!=TrigLfoNone&&lfo.destination>=TrigParamCount)lfo.destination=TrigLfoNone;lfo.depth=int8_t(std::clamp(int(lfo.depth),-100,100));
     std::lock_guard<std::mutex> lock(impl->mutex);impl->state.sequences[impl->state.sequence].trig.tracks[size_t(track)].lfo=lfo;
 }
+void Engine::setHostSync(bool enabled){std::lock_guard<std::mutex> lock(impl->mutex);impl->state.hostSync=enabled;if(enabled)impl->state.midiClockOut=false;}
+void Engine::setHostTransport(bool playing,double quarterNotes,double bpm){
+    std::lock_guard<std::mutex> lock(impl->mutex);impl->hostPlaying=playing;if(std::isfinite(quarterNotes))impl->hostSteps=quarterNotes*4.;if(std::isfinite(bpm)&&bpm>0)impl->hostBpm=bpm;
+}
+void Engine::setMultiOut(bool enabled){std::lock_guard<std::mutex> lock(impl->mutex);impl->multiOut=enabled;}
+void Engine::setTrackOutput(int track,int output){if(track<0||track>=TrigTracks)return;std::lock_guard<std::mutex> lock(impl->mutex);impl->state.trackOutput[size_t(track)]=uint8_t(std::clamp(output,0,8));}
+std::array<uint8_t,TrigTracks> Engine::trackOutputs(){std::lock_guard<std::mutex> lock(impl->mutex);return impl->state.trackOutput;}
+void Engine::trackBlock(int pad,float* left,float* right)const{
+    if(pad<0||pad>=Pads)return;const auto& capture=impl->players[size_t(pad)]->capture;
+    std::copy(capture[0].begin(),capture[0].end(),left);std::copy(capture[1].begin(),capture[1].end(),right);
+}
 void Engine::setFill(bool active){std::lock_guard<std::mutex> lock(impl->mutex);impl->state.fill=active;}
 void Engine::setMidiClockOut(bool enabled){std::lock_guard<std::mutex> lock(impl->mutex);impl->state.midiClockOut=enabled;}
 void Engine::sendMidi(uint32_t message){impl->pushMidi(0,message);}
@@ -436,7 +455,8 @@ void Engine::trigImportKickSteps(){
 // ---------------------------------------------------------------- persistence
 namespace {
 void writeTrigSection(std::ostream& f,const Snapshot& s){
-    f<<"TRIGDATA 3 "<<Sequences<<'\n';
+    f<<"TRIGDATA 4 "<<Sequences<<'\n';
+    f<<"TO";for(int t=0;t<TrigTracks;++t)f<<' '<<int(s.trackOutput[size_t(t)]);f<<'\n';
     for(int index=0;index<Sequences;++index){
         const auto& pattern=s.sequences[index].trig;
         f<<"TP "<<index<<' '<<pattern.masterLength<<' '<<pattern.swing<<' '<<pattern.sceneA<<' '<<pattern.sceneB<<'\n';
@@ -458,8 +478,10 @@ void writeTrigSection(std::ostream& f,const Snapshot& s){
     }
     f<<"TRIGEND\n";
 }
-bool readTrigSection(std::istream& f,std::array<TrigPattern,Sequences>& patterns){
-    std::string tag;int version=0,count=0;if(!(f>>tag>>version>>count)||tag!="TRIGDATA"||version<1||version>3||count!=Sequences)return false;
+bool readTrigSection(std::istream& f,std::array<TrigPattern,Sequences>& patterns,std::array<uint8_t,TrigTracks>& outputs){
+    std::string tag;int version=0,count=0;if(!(f>>tag>>version>>count)||tag!="TRIGDATA"||version<1||version>4||count!=Sequences)return false;
+    outputs.fill(0);
+    if(version>=4){if(!(f>>tag)||tag!="TO")return false;for(auto& o:outputs){int v=0;if(!(f>>v))return false;o=uint8_t(std::clamp(v,0,8));}}
     for(int index=0;index<Sequences;++index){
         int parsed=-1;auto& pattern=patterns[index];pattern=TrigPattern{};
         if(!(f>>tag>>parsed>>pattern.masterLength>>pattern.swing)||tag!="TP"||parsed!=index)return false;

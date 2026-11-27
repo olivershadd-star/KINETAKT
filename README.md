@@ -3,8 +3,9 @@
 # ELEKTAKT
 ### ELEKTRON-STYLE SEQUENCER · SOUND + MIDI TRACKS · FREE
 
-![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.5.0-EF343E?style=for-the-badge&labelColor=10151E)
+![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.6.0-EF343E?style=for-the-badge&labelColor=10151E)
 ![Windows](https://img.shields.io/badge/WINDOWS-10%20%2F%2011_X64-19B9FF?style=for-the-badge&labelColor=10151E)
+![VST3](https://img.shields.io/badge/VST3-ABLETON_LIVE-19B9FF?style=for-the-badge&labelColor=10151E)
 ![Licence](https://img.shields.io/badge/LICENCE-AGPL--3.0--or--later-F5C343?style=for-the-badge&labelColor=10151E)
 
 **ANKS LABS // BUILD. BREAK. REWIRE. LISTEN.**
@@ -22,7 +23,7 @@
 
 ## 01 // TÉLÉCHARGER ET LANCER — DOWNLOAD & RUN
 
-1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.5.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
+1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.6.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
 2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `ELEKTAKT.exe`.
 3. Lance **ELEKTAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
 
@@ -32,7 +33,24 @@
 
 **EN —** Download the latest ZIP from Releases, extract everything, keep `demo-kit` next to `ELEKTAKT.exe` and run it. No installation.
 
-## 02 // LE SÉQUENCEUR — THE SEQUENCER
+## 02 // DANS ABLETON — THE VST3 PLUGIN
+
+Le ZIP contient aussi **`VST3/ELEKTAKT.vst3`** : le même séquenceur, les mêmes écrans, dans Ableton Live (Live Lite compris).
+
+1. Copie le dossier **`ELEKTAKT.vst3`** dans **`C:\Program Files\Common Files\VST3`**.
+2. Dans Live : **Préférences → Plug-ins → Dossier système VST3 = On**, puis **Relancer l'analyse**.
+3. Dans le navigateur : **Plug-ins → ANKS Labs → ELEKTAKT**, glisse-le sur une **piste MIDI**.
+4. Lance la lecture dans Live : ELEKTAKT suit le **tempo**, la **position** et les **boucles** de Live (bouton **SYNC LIVE**).
+
+| Dans Live | Comment faire |
+|:--|:--|
+| **Sorties séparées** | Clic droit sur une piste d'ELEKTAKT → **Sortie audio de la piste** → Sortie 2 à 9. Dans Live, crée une piste audio : **Audio From** = la piste d'ELEKTAKT, puis **ELEKTAKT / Sortie 2…**. Idéal pour enregistrer des stems. |
+| **Pistes MIDI → un synthé de Live** | **SORTIE DES PISTES MIDI = MIDI du plugin**, puis sur la piste du synthé : **MIDI From** = la piste d'ELEKTAKT → **ELEKTAKT**. Live ramène tout ce MIDI sur **un seul canal** : un seul synthé par instance. |
+| **Plusieurs synthés** | Choisis un port **loopMIDI** comme sortie : chaque piste MIDI garde son canal (même réglage que l'application). |
+| **Jouer depuis Live** | Les notes reçues jouent la piste sélectionnée, ou les 16 pistes en **mode pads** (RÉGLAGES). Avec REC armé, elles s'enregistrent. |
+| **Sauvegarde** | Patterns, locks, scènes et réglages sont gardés **dans le set Live**. Les samples restent là où ils sont (garde-les en place). Le kit démo, `samples` et `projets` sont dans **Documents\ELEKTAKT**. |
+
+## 02b // LE SÉQUENCEUR — THE SEQUENCER
 
 | Fonction | Comment faire |
 |:--|:--|
@@ -102,14 +120,14 @@ L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages d
 - [x] LFO par piste, mode pads pour l'entrée MIDI (0.3.0)
 - [x] Générateur (euclidien, aléatoire, mutation, accidents), export des stems (0.4.0)
 - [x] Navigateur de sons, rééchantillonnage, découpage en tranches (0.5.0)
-- [ ] Version VST3 pour Ableton
+- [x] Version VST3 pour Ableton : synchro Live, sorties séparées, état dans le set (0.6.0)
 
 ## 07 // COMPILER — BUILD FROM SOURCE
 
-Windows, Visual Studio 2022 + CMake :
+Windows, Visual Studio 2022 + CMake (le VST3 télécharge JUCE automatiquement) :
 
 ```powershell
-cmake -S . -B build -A x64
+cmake -S . -B build -A x64 -DELEKTAKT_PLUGIN=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
@@ -119,7 +137,7 @@ Compilation croisée MinGW : `-DCMAKE_TOOLCHAIN_FILE=tools/mingw.cmake`.
 
 ## 08 // LICENCE & SOURCES
 
-ELEKTAKT est libre et gratuit, sous **AGPL-3.0-or-later**. Il est construit sur le moteur **KICK** d'ANKS Labs, basé sur le code ouvert **AudIO / KICK de Music Tribe** ([0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM), AGPL-3.0), avec les effets **[Airwindows](https://www.airwindows.com/)** de Chris Johnson (MIT) et **AudioFile** d'Adam Stark (MIT). Détails : [NOTICES.txt](NOTICES.txt).
+ELEKTAKT est libre et gratuit, sous **AGPL-3.0-or-later**. Il est construit sur le moteur **KICK** d'ANKS Labs, basé sur le code ouvert **AudIO / KICK de Music Tribe** ([0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM), AGPL-3.0), le plugin utilise **[JUCE](https://juce.com)** (AGPLv3), avec les effets **[Airwindows](https://www.airwindows.com/)** de Chris Johnson (MIT) et **AudioFile** d'Adam Stark (MIT). Détails : [NOTICES.txt](NOTICES.txt).
 
 L'ergonomie s'inspire des machines **Elektron**. Elektron, Ableton, Behringer, Music Tribe et KICK sont des marques de leurs propriétaires ; ANKS Labs n'est ni affilié à ces fabricants ni approuvé par eux.
 

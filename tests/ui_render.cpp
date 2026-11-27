@@ -39,7 +39,7 @@ struct FakeHost:Host{
     std::vector<std::string> midiOutputs()override{return {"loopMIDI Port"};} int midiOutput()override{return 0;} void selectMidiOutput(int)override{}
     void stopAudio()override{} void startAudio()override{} void quit()override{}
 };
-__attribute__((noinline)) static std::unique_ptr<lab::Snapshot> grab(lab::Engine& e){return std::make_unique<lab::Snapshot>(e.snapshot());}
+__attribute__((noinline)) static std::unique_ptr<lab::Snapshot> grab(lab::Engine& e){auto s=std::make_unique<lab::Snapshot>();e.snapshotTo(*s);return s;}
 static void shot(TrigUI& ui,const char* file){
     auto* surface=cairo_image_surface_create(CAIRO_FORMAT_RGB24,DesignWidth,DesignHeight);auto* cr=cairo_create(surface);CairoPainter p(cr);ui.paint(p);cairo_surface_write_to_png(surface,file);cairo_destroy(cr);cairo_surface_destroy(surface);std::cout<<"wrote "<<file<<"\n";
 }

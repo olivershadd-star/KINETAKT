@@ -33,7 +33,7 @@ struct Rig {
 #else
 #define TRIG_NOINLINE __attribute__((noinline))
 #endif
-TRIG_NOINLINE static std::unique_ptr<Snapshot> grabImpl(Engine& e){return std::make_unique<Snapshot>(e.snapshot());}
+TRIG_NOINLINE static std::unique_ptr<Snapshot> grabImpl(Engine& e){auto s=std::make_unique<Snapshot>();e.snapshotTo(*s);return s;}
 static std::unique_ptr<Snapshot> grab(Engine& e){return grabImpl(e);}
 static double stepFrames(double tempo=120){return 48000*60./tempo/4.;}
 static TrigTrack midiTrack(int channel){TrigTrack t;t.type=TrigTrackType::Midi;t.midiChannel=uint8_t(channel);t.defaultNote=60;return t;}
@@ -153,6 +153,21 @@ int main(int argc,char** argv){
     {Rig r;std::string error;check(r.engine->load(0,sample,error),"lfo sample");TrigLfo lfo;lfo.wave=LfoSquare;lfo.speed=0;lfo.depth=-100;lfo.destination=TrigLevel;r.engine->trigSetLfo(0,lfo);
      auto s=grab(*r.engine);check(s->sequences[0].trig.tracks[0].lfo.destination==TrigLevel,"audio LFO set");
      r.engine->trigToggle(0,0);r.engine->setPlaying(true);r.run(int(2*sf/Block));s=grab(*r.engine);check(std::abs(s->trigLfo[0])>.99,"LFO output visible");}
+    // 15. Plugin: host transport sync (start mid-song, loop jump) and tempo.
+    {Rig r;r.engine->setHostSync(true);r.engine->trigSetTrackConfig(0,midiTrack(0));r.engine->trigToggle(0,0);
+     double q=4.;const double perBlock=Block/(48000.*60./133.);float block[Block*2];int fired=0;
+     auto run=[&](int blocks){for(int b=0;b<blocks;++b){r.engine->setHostTransport(true,q,133);r.engine->render(block);q+=perBlock;MidiEvent e;while(r.engine->popMidi(e))if((e.message&0xF0)==0x90&&((e.message>>16)&127))++fired;}};
+     run(3);check(fired==1,"host start on bar 2 plays step 1 at once: "+std::to_string(fired));
+     q=4.;run(2);check(fired==2,"host loop jump replays step 1: "+std::to_string(fired));
+     auto snap=grab(*r.engine);check(std::abs(snap->tempo-133)<1e-9&&snap->playing,"tempo and play follow the host");
+     r.engine->setHostTransport(false,q,133);r.engine->render(block);snap=grab(*r.engine);check(!snap->playing,"host stop stops the sequencer");}
+    // 16. Plugin: a track routed to a separate output leaves the main mix.
+    {Rig r;std::string error;check(r.engine->load(0,sample,error),"multi sample");r.engine->setMultiOut(true);r.engine->setTrackOutput(0,1);
+     r.engine->trigger(0);float block[Block*2];r.engine->render(block);double main=0;for(float v:block)main+=std::abs(v);
+     float left[Block],right[Block];r.engine->trackBlock(0,left,right);double direct=0;for(int i=0;i<Block;++i)direct+=std::abs(left[i])+std::abs(right[i]);
+     check(main<1e-6&&direct>1,"separate output: main silent, track buffer filled");
+     r.engine->setTrackOutput(0,0);r.engine->trigger(0);r.engine->render(block);main=0;for(float v:block)main+=std::abs(v);check(main>1,"back to the main mix");
+     const auto file=(dir/"outputs.elektakt").u8string();r.engine->setTrackOutput(5,3);check(r.engine->save(file,error),"outputs save");auto f=std::make_unique<Engine>();check(f->open(file,error),"outputs open");check(grab(*f)->trackOutput[5]==3,"track output restored");}
     // 12. Live state reaches the interface snapshot (playheads, fill, clock, crossfader).
     {Rig r;auto t=midiTrack(0);t.length=4;r.engine->trigSetTrackConfig(0,t);r.engine->setFill(true);r.engine->setMidiClockOut(false);r.engine->setCrossfader(.3);
      r.engine->setPlaying(true);r.run(int(2.5*sf/Block));auto s=grab(*r.engine);
