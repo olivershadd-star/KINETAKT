@@ -289,7 +289,7 @@ struct TrigUI::Impl {
         updateTitle();
     }
     void updateTitle() {
-        host.setTitle("ELEKTAKT — " + (project.empty() ? std::string("Nouveau projet") : project.filename().u8string()) +
+        host.setTitle("KINETAKT — " + (project.empty() ? std::string("Nouveau projet") : project.filename().u8string()) +
                       (ui.dirty ? " *" : ""));
     }
     std::string trackName(int t) const {
@@ -771,7 +771,7 @@ struct TrigUI::Impl {
 
     // ----- status / settings -----
     void status(const std::string& text) { ui.status = text; }
-    std::filesystem::path settingsPath() const { return base / "ELEKTAKT-settings.txt"; }
+    std::filesystem::path settingsPath() const { return base / "KINETAKT-settings.txt"; }
     void saveSettings() {
         std::ofstream f(settingsPath().u8string(), std::ios::trunc);
         if (!f) return;
@@ -784,7 +784,9 @@ struct TrigUI::Impl {
         if (!customFolder.empty()) f << "FOLDER " << customFolder.u8string() << '\n';
     }
     void loadSettings() {
-        std::ifstream f(settingsPath().u8string());
+        std::error_code ec;
+        const auto path = std::filesystem::exists(settingsPath(), ec) ? settingsPath() : base / "ELEKTAKT-settings.txt"; // before 0.7.1
+        std::ifstream f(path.u8string());
         std::string tag;
         int version = 0;
         if (!f || !(f >> tag >> version) || tag != "TRIGSETTINGS") return;
@@ -814,11 +816,14 @@ struct TrigUI::Impl {
     bool saveProject(bool ask) {
         auto path = project;
         if (ask || path.empty()) {
-            const auto chosen = host.savePath("Enregistrer le projet ELEKTAKT", "project",
-                                              project.empty() ? "projet.elektakt" : project.filename().u8string());
+            const auto chosen = host.savePath("Enregistrer le projet KINETAKT", "project",
+                                              project.empty() ? "projet.kinetakt" : project.filename().u8string());
             if (chosen.empty()) return false;
             path = std::filesystem::u8path(chosen);
-            if (path.extension() != ".elektakt") path += ".elektakt";
+            if (path.extension() != ".kinetakt") {
+                if (path.extension() == ".elektakt") path.replace_extension();
+                path += ".kinetakt";
+            }
         }
         std::string error;
         if (!engine.save(path.u8string(), error)) {
@@ -837,7 +842,7 @@ struct TrigUI::Impl {
     }
     void openProject(const std::string& kind) {
         if (!confirmDiscard()) return;
-        const auto chosen = host.openPath(kind == "kick" ? "Importer un projet KICK" : "Ouvrir un projet ELEKTAKT", kind);
+        const auto chosen = host.openPath(kind == "kick" ? "Importer un projet KICK" : "Ouvrir un projet KINETAKT", kind);
         if (chosen.empty()) return;
         host.stopAudio();
         std::string error;
@@ -852,7 +857,7 @@ struct TrigUI::Impl {
         ui.latched.clear();
         refresh();
         updateTitle();
-        status(error.empty() ? (kind == "kick" ? "Projet KICK importé : ses pas sont devenus des trigs. Enregistre-le en .elektakt."
+        status(error.empty() ? (kind == "kick" ? "Projet KICK importé : ses pas sont devenus des trigs. Enregistre-le en .kinetakt."
                                                : "Projet ouvert : " + fileStem(chosen))
                              : error);
     }
@@ -1298,7 +1303,7 @@ struct TrigUI::Impl {
     // ----- menus -----
     void fileMenu() {
         const int choice = host.popup({{"Nouveau projet"},
-                                       {"Ouvrir un projet ELEKTAKT…"},
+                                       {"Ouvrir un projet KINETAKT…"},
                                        {"Enregistrer"},
                                        {"Enregistrer sous…"},
                                        {"", false, true, true},
@@ -1468,7 +1473,7 @@ struct TrigUI::Impl {
         status(choice == 0
                    ? "Piste " + std::to_string(t + 1) + " dans le mix principal."
                    : "Piste " + std::to_string(t + 1) + " → Sortie " + std::to_string(choice + 1) +
-                         " : dans Live, crée une piste audio et choisis ELEKTAKT / Sortie " + std::to_string(choice + 1) + " en entrée.");
+                         " : dans Live, crée une piste audio et choisis KINETAKT / Sortie " + std::to_string(choice + 1) + " en entrée.");
     }
     void channelMenu(int t) {
         std::vector<MenuItem> items;
@@ -1738,9 +1743,9 @@ struct TrigUI::Impl {
         p.disc(cx, cy, 7, k.enabled ? Ink : Dim);
         p.text(r.x + 4, r.y + r.h - (large ? 50 : 44), r.w - 8, 24, k.display, large ? 16 : 14, k.enabled ? Ink : Dim, Align::Center, true);
         if (k.locked)
-            p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "LOCK · clic droit = retirer", 11, Red, Align::Center);
+            p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "LOCK · 2 clics = retirer", 11, Red, Align::Center);
         else if (k.scene)
-            p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "SCÈNE · clic droit = retirer", 11, Green, Align::Center);
+            p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "SCÈNE · 2 clics = retirer", 11, Green, Align::Center);
         else if (k.ccSlot >= 0 && large)
             p.text(r.x + 4, r.y + r.h - 26, r.w - 8, 18, "molette sur le titre = n° CC", 11, Dim, Align::Center);
     }
@@ -1857,7 +1862,7 @@ struct TrigUI::Impl {
         const auto& tr = current();
         p.fill(0, 0, DesignWidth, DesignHeight, Bg);
         // Header
-        p.text(16, 8, 176, 36, "ELEKTAKT", 25, Ink, Align::Left, true);
+        p.text(16, 8, 176, 36, "KINETAKT", 25, Ink, Align::Left, true);
         p.text(20, 42, 170, 18, "ANKS LABS · SÉQUENCEUR", 11, Blue, Align::Left, true);
         button(p, HeaderPlay, "▶ PLAY", snap->playing, Green, 15);
         button(p, HeaderStop, "■ STOP", false);
@@ -3017,7 +3022,7 @@ struct TrigUI::Impl {
 
 TrigUI::TrigUI(Engine& engine, Host& host, std::string baseDirectory)
     : impl(std::make_unique<Impl>(*this, engine, host, std::filesystem::u8path(baseDirectory))) {
-    status = "Bienvenue dans ELEKTAKT : clique sur les pas pour poser des trigs, clic droit pour les sélectionner et poser des locks.";
+    status = "Bienvenue dans KINETAKT : clique sur les pas pour poser des trigs, clic droit pour les sélectionner et poser des locks.";
 }
 TrigUI::~TrigUI() = default;
 void TrigUI::paint(Painter& p) { impl->paint(p); }

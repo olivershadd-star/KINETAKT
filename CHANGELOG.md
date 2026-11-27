@@ -1,4 +1,10 @@
-# ELEKTAKT — versions
+# KINETAKT — versions
+
+## 0.7.1
+- **ELEKTAKT devient KINETAKT** (application, plugin, ZIP, dossier Documents\KINETAKT, projets `.kinetakt`).
+  - Les projets `.elektakt` s'ouvrent toujours, les réglages et appareils MIDI de l'ancienne version sont repris.
+  - Le plugin garde son identifiant VST3 : les sets Live faits avec ELEKTAKT le retrouvent. **Supprime l'ancien dossier `ELEKTAKT.vst3`** pour ne pas avoir deux fois le même plugin.
+- Première version publiée comme version stable (plus « préversion »).
 
 ## 0.7.0
 - **Effets partagés (envois à la Elektron)** : une réverbe et un delay communs à toutes les pistes.
@@ -25,7 +31,7 @@
   - **8 sorties stéréo séparées** en plus de la sortie principale, au choix par piste ;
   - pistes MIDI vers Live (un canal) ou vers un port loopMIDI (multicanal) ;
   - notes reçues de Live : piste sélectionnée ou mode pads, enregistrement REC ;
-  - tout le projet est sauvegardé dans le set Live ; kit démo et samples dans Documents\ELEKTAKT.
+  - tout le projet est sauvegardé dans le set Live ; kit démo et samples dans Documents\KINETAKT.
 - Vérifié automatiquement à chaque version : hôte de test (lecture synchronisée, arrêt, sauvegarde / rechargement, éditeur) et **pluginval**.
 - Moteur : l'interface n'utilise plus de grosses copies sur la pile (nécessaire dans un plugin).
 

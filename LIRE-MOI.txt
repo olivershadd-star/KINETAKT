@@ -1,9 +1,9 @@
-ELEKTAKT — séquenceur à la Elektron · ANKS Labs
+KINETAKT — séquenceur à la Elektron · ANKS Labs
 ============================================
 
 DÉMARRER
-1. Extrais tout le dossier ZIP (clic droit > Extraire tout), pas seulement ELEKTAKT.exe.
-2. Lance ELEKTAKT.exe. Un pattern de démonstration est chargé : appuie sur ESPACE.
+1. Extrais tout le dossier ZIP (clic droit > Extraire tout), pas seulement KINETAKT.exe.
+2. Lance KINETAKT.exe. Un pattern de démonstration est chargé : appuie sur ESPACE.
 3. Clic sur un pas = poser / retirer un trig.
 4. Clic droit sur un pas = le sélectionner, puis tourne un potard = PARAMETER LOCK.
    Plus rapide : maintiens le clic sur un pas et tourne la molette = lock du dernier potard touché.
@@ -26,16 +26,18 @@ DÉMARRER
 16. Molette sur le niveau d'une piste (à gauche, à côté de M / S) = régler son volume.
 
 PLUGIN VST3 DANS ABLETON
-1. Copie le dossier VST3\ELEKTAKT.vst3 dans C:\Program Files\Common Files\VST3
+0. Tu avais ELEKTAKT (ancien nom) ? Supprime d'abord le dossier ELEKTAKT.vst3 du dossier VST3.
+   Tes sets Live retrouvent le plugin et les projets .elektakt s'ouvrent toujours.
+1. Copie le dossier VST3\KINETAKT.vst3 dans C:\Program Files\Common Files\VST3
 2. Live : Préférences > Plug-ins > Dossier système VST3 = On, puis Relancer l'analyse.
-3. Plug-ins > ANKS Labs > ELEKTAKT sur une piste MIDI. La lecture suit Live.
-4. Sorties séparées : clic droit sur une piste d'ELEKTAKT > Sortie audio de la piste.
-   Dans Live, piste audio > Audio From = piste ELEKTAKT > ELEKTAKT / Sortie n.
+3. Plug-ins > ANKS Labs > KINETAKT sur une piste MIDI. La lecture suit Live.
+4. Sorties séparées : clic droit sur une piste de KINETAKT > Sortie audio de la piste.
+   Dans Live, piste audio > Audio From = piste KINETAKT > KINETAKT / Sortie n.
 
 ENVOYER LE MIDI VERS ABLETON DEPUIS L'APPLICATION (pistes MIDI + horloge)
 1. Installe loopMIDI (gratuit) : https://www.tobias-erichsen.de/software/loopmidi.html
    et crée un port (bouton +).
-2. Dans ELEKTAKT : SORTIE MIDI > choisis le port loopMIDI.
+2. Dans KINETAKT : SORTIE MIDI > choisis le port loopMIDI.
    Passe une piste en MIDI (bouton SON | MIDI) et choisis son canal.
 3. Dans Ableton : Préférences > Link, Tempo & MIDI > entrée loopMIDI :
    « Piste » (Track) = On pour recevoir les notes, « Sync » = On pour suivre le tempo.

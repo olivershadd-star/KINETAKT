@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// ELEKTAKT — VST3 plugin (JUCE). Same engine and interface as the standalone
+// KINETAKT — VST3 plugin (JUCE). Same engine and interface as the standalone
 // application; the host drives transport, tempo and sample rate.
 #include <JuceHeader.h>
 #include "engine.hpp"
@@ -15,7 +15,7 @@ namespace {
 constexpr int AuxOutputs = 8; // separate stereo outputs 2–9
 constexpr int EngineChannels = 2 + AuxOutputs * 2;
 
-juce::File baseFolder() { return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("ELEKTAKT"); }
+juce::File baseFolder() { return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("KINETAKT"); }
 
 // Writes the embedded demo kit next to the user's samples the first time.
 void installDemoKit() {
@@ -56,12 +56,12 @@ struct Fifo {
 };
 } // namespace
 
-class ElektaktProcessor;
+class KinetaktProcessor;
 
 // ----------------------------------------------------------------- host services
 class PluginHost : public trig::Host {
 public:
-    explicit PluginHost(ElektaktProcessor& p) : processor(p) {}
+    explicit PluginHost(KinetaktProcessor& p) : processor(p) {}
     int popup(const std::vector<trig::MenuItem>& items) override {
         juce::PopupMenu menu;
         for (size_t i = 0; i < items.size(); ++i) {
@@ -75,7 +75,7 @@ public:
         return menu.showMenu(juce::PopupMenu::Options().withParentComponent(editor)) - 1;
     }
     static juce::String pattern(const std::string& kind) {
-        if (kind == "project") return "*.elektakt";
+        if (kind == "project") return "*.kinetakt;*.elektakt";
         if (kind == "kick") return "*.kicklab";
         if (kind == "kit") return "*.kickkit";
         return "*.wav";
@@ -93,7 +93,7 @@ public:
         return chooser.browseForFileToSave(true) ? chooser.getResult().getFullPathName().toStdString() : std::string();
     }
     bool confirm(const std::string& question) override {
-        return juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::QuestionIcon, "ELEKTAKT",
+        return juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::QuestionIcon, "KINETAKT",
                                                   juce::String::fromUTF8(question.c_str()), "Oui", "Non", editor);
     }
     void setTitle(const std::string&) override {}
@@ -114,13 +114,13 @@ public:
     juce::Component* editor = nullptr;
 
 private:
-    ElektaktProcessor& processor;
+    KinetaktProcessor& processor;
 };
 
 // ----------------------------------------------------------------- processor
-class ElektaktProcessor : public juce::AudioProcessor, private juce::Timer {
+class KinetaktProcessor : public juce::AudioProcessor, private juce::Timer {
 public:
-    ElektaktProcessor() : juce::AudioProcessor(makeBuses()), host(*this) {
+    KinetaktProcessor() : juce::AudioProcessor(makeBuses()), host(*this) {
         installDemoKit();
         engine = std::make_unique<lab::Engine>();
         engine->setHostSync(true);
@@ -129,7 +129,7 @@ public:
         ui->loadDemo();
         startTimerHz(30);
     }
-    ~ElektaktProcessor() override {
+    ~KinetaktProcessor() override {
         stopTimer();
         suspend();
         ui.reset();
@@ -150,7 +150,7 @@ public:
         }
         return layout.inputBuses.isEmpty();
     }
-    const juce::String getName() const override { return "ELEKTAKT"; }
+    const juce::String getName() const override { return "KINETAKT"; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return true; }
     bool isMidiEffect() const override { return false; }
@@ -158,7 +158,7 @@ public:
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
     void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return "ELEKTAKT"; }
+    const juce::String getProgramName(int) override { return "KINETAKT"; }
     void changeProgramName(int, const juce::String&) override {}
     bool hasEditor() const override { return true; }
     juce::AudioProcessorEditor* createEditor() override;
@@ -293,7 +293,7 @@ public:
 
     // ----- state saved in the Live set -----
     void getStateInformation(juce::MemoryBlock& data) override {
-        const auto temp = juce::File::createTempFile(".elektakt");
+        const auto temp = juce::File::createTempFile(".kinetakt");
         std::string error;
         if (engine->save(temp.getFullPathName().toStdString(), error)) {
             juce::MemoryOutputStream out(data, false);
@@ -309,14 +309,14 @@ public:
     }
     void setStateInformation(const void* data, int size) override {
         juce::MemoryInputStream in(data, size_t(size), false);
-        if (in.readString() != "ELEKTAKT-STATE-1") return;
+        if (in.readString() != "ELEKTAKT-STATE-1") return; // historical tag, kept so older Live sets reload
         const int mode = in.readInt();
         const auto name = in.readString();
         const auto length = in.readInt64();
         if (length <= 0 || length > 64 * 1024 * 1024) return;
         juce::MemoryBlock file;
         in.readIntoMemoryBlock(file, length);
-        const auto temp = juce::File::createTempFile(".elektakt");
+        const auto temp = juce::File::createTempFile(".kinetakt");
         temp.replaceWithData(file.getData(), file.getSize());
         suspend();
         std::string error;
@@ -426,9 +426,9 @@ void PluginHost::stopAudio() { processor.suspend(); }
 void PluginHost::startAudio() { processor.resume(); }
 
 // ----------------------------------------------------------------- editor
-class ElektaktEditor : public juce::AudioProcessorEditor, public juce::FileDragAndDropTarget, private juce::Timer {
+class KinetaktEditor : public juce::AudioProcessorEditor, public juce::FileDragAndDropTarget, private juce::Timer {
 public:
-    explicit ElektaktEditor(ElektaktProcessor& p) : juce::AudioProcessorEditor(p), processor(p) {
+    explicit KinetaktEditor(KinetaktProcessor& p) : juce::AudioProcessorEditor(p), processor(p) {
         processor.host.editor = this;
         processor.editorOpen = true;
         setResizable(true, true);
@@ -438,7 +438,7 @@ public:
         setWantsKeyboardFocus(true);
         startTimerHz(30);
     }
-    ~ElektaktEditor() override {
+    ~KinetaktEditor() override {
         stopTimer();
         processor.host.editor = nullptr;
         processor.editorOpen = false;
@@ -532,10 +532,10 @@ private:
     void timerCallback() override {
         if (processor.ui->tick()) repaint();
     }
-    ElektaktProcessor& processor;
+    KinetaktProcessor& processor;
     bool fillHeld = false;
 };
 
-juce::AudioProcessorEditor* ElektaktProcessor::createEditor() { return new ElektaktEditor(*this); }
+juce::AudioProcessorEditor* KinetaktProcessor::createEditor() { return new KinetaktEditor(*this); }
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new ElektaktProcessor(); }
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new KinetaktProcessor(); }

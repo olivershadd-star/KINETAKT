@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
-project(ELEKTAKT VERSION 0.7.0 LANGUAGES C CXX)
+project(KINETAKT VERSION 0.7.1 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 
-# Audio engine inherited from KICK (AudIO + Airwindows) with the ELEKTAKT (TRIG layer) sequencer.
+# Audio engine inherited from KICK (AudIO + Airwindows) with the KINETAKT (TRIG layer) sequencer.
 add_library(trig_engine STATIC src/engine.cpp)
 target_include_directories(trig_engine PUBLIC src PRIVATE vendor/AudIO)
 target_link_libraries(trig_engine PUBLIC Threads::Threads)
@@ -16,18 +16,18 @@ elseif(MINGW)
 endif()
 
 if(WIN32)
-    add_executable(ELEKTAKT WIN32 src/trig_windows.cpp src/ui.cpp)
-    target_link_libraries(ELEKTAKT PRIVATE trig_engine winmm avrt comdlg32 shell32 gdi32 gdiplus)
-    target_compile_definitions(ELEKTAKT PRIVATE UNICODE _UNICODE)
+    add_executable(KINETAKT WIN32 src/trig_windows.cpp src/ui.cpp)
+    target_link_libraries(KINETAKT PRIVATE trig_engine winmm avrt comdlg32 shell32 gdi32 gdiplus)
+    target_compile_definitions(KINETAKT PRIVATE UNICODE _UNICODE)
     if(MSVC)
-        target_compile_options(ELEKTAKT PRIVATE /utf-8)
+        target_compile_options(KINETAKT PRIVATE /utf-8)
         # Snapshots hold every pattern; keep a comfortable GUI stack.
-        target_link_options(ELEKTAKT PRIVATE /STACK:16777216)
+        target_link_options(KINETAKT PRIVATE /STACK:16777216)
     elseif(MINGW)
-        target_link_options(ELEKTAKT PRIVATE -static -municode -Wl,--stack,16777216)
+        target_link_options(KINETAKT PRIVATE -static -municode -Wl,--stack,16777216)
     endif()
-    add_custom_command(TARGET ELEKTAKT POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/demo-kit $<TARGET_FILE_DIR:ELEKTAKT>/demo-kit)
+    add_custom_command(TARGET KINETAKT POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/demo-kit $<TARGET_FILE_DIR:KINETAKT>/demo-kit)
 endif()
 
 add_executable(TRIG-Test tests/trig_test.cpp)
@@ -51,8 +51,8 @@ if(TRIG_UI_HARNESS)
 endif()
 
 # ----- VST3 plugin (JUCE) -----
-option(ELEKTAKT_PLUGIN "Build the ELEKTAKT VST3 plugin with JUCE" OFF)
-if(ELEKTAKT_PLUGIN)
+option(KINETAKT_PLUGIN "Build the KINETAKT VST3 plugin with JUCE" OFF)
+if(KINETAKT_PLUGIN)
     set_target_properties(trig_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
     if(JUCE_SOURCE_DIR)
         add_subdirectory(${JUCE_SOURCE_DIR} JUCE)
@@ -61,8 +61,8 @@ if(ELEKTAKT_PLUGIN)
         FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.17-security GIT_SHALLOW TRUE)
         FetchContent_MakeAvailable(JUCE)
     endif()
-    juce_add_plugin(ELEKTAKT_VST3
-        PRODUCT_NAME "ELEKTAKT"
+    juce_add_plugin(KINETAKT_VST3
+        PRODUCT_NAME "KINETAKT"
         COMPANY_NAME "ANKS Labs"
         COMPANY_WEBSITE "https://github.com/olivershadd-star"
         PLUGIN_MANUFACTURER_CODE AnkL
@@ -76,28 +76,28 @@ if(ELEKTAKT_PLUGIN)
         EDITOR_WANTS_KEYBOARD_FOCUS TRUE
         VST3_CATEGORIES Instrument Sampler Drum
         COPY_PLUGIN_AFTER_BUILD FALSE)
-    file(GLOB ELEKTAKT_DEMO_WAVS ${CMAKE_CURRENT_SOURCE_DIR}/demo-kit/*.wav)
-    juce_add_binary_data(ElektaktDemoKit HEADER_NAME DemoKit.h NAMESPACE DemoKit SOURCES ${ELEKTAKT_DEMO_WAVS})
-    set_target_properties(ElektaktDemoKit PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    juce_generate_juce_header(ELEKTAKT_VST3)
-    target_sources(ELEKTAKT_VST3 PRIVATE plugin/ElektaktPlugin.cpp src/ui.cpp)
-    target_include_directories(ELEKTAKT_VST3 PRIVATE src plugin)
-    target_compile_definitions(ELEKTAKT_VST3 PUBLIC
+    file(GLOB KINETAKT_DEMO_WAVS ${CMAKE_CURRENT_SOURCE_DIR}/demo-kit/*.wav)
+    juce_add_binary_data(KinetaktDemoKit HEADER_NAME DemoKit.h NAMESPACE DemoKit SOURCES ${KINETAKT_DEMO_WAVS})
+    set_target_properties(KinetaktDemoKit PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    juce_generate_juce_header(KINETAKT_VST3)
+    target_sources(KINETAKT_VST3 PRIVATE plugin/KinetaktPlugin.cpp src/ui.cpp)
+    target_include_directories(KINETAKT_VST3 PRIVATE src plugin)
+    target_compile_definitions(KINETAKT_VST3 PUBLIC
         JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_MODAL_LOOPS_PERMITTED=1 JUCE_DISPLAY_SPLASH_SCREEN=0)
     if(MSVC)
-        target_compile_options(ELEKTAKT_VST3 PRIVATE /utf-8)
+        target_compile_options(KINETAKT_VST3 PRIVATE /utf-8)
     endif()
-    target_link_libraries(ELEKTAKT_VST3 PRIVATE trig_engine ElektaktDemoKit
+    target_link_libraries(KINETAKT_VST3 PRIVATE trig_engine KinetaktDemoKit
         juce::juce_audio_utils juce::juce_audio_processors
         PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
 endif()
-if(ELEKTAKT_PLUGIN AND ELEKTAKT_PLUGIN_TEST)
+if(KINETAKT_PLUGIN AND KINETAKT_PLUGIN_TEST)
     # Minimal VST3 host used by the tests: loads the built plugin like a DAW.
-    juce_add_console_app(ELEKTAKT_PluginHostTest PRODUCT_NAME "ELEKTAKT-PluginHostTest")
-    juce_generate_juce_header(ELEKTAKT_PluginHostTest)
-    target_sources(ELEKTAKT_PluginHostTest PRIVATE tests/plugin_host_test.cpp src/ui.cpp)
-    target_include_directories(ELEKTAKT_PluginHostTest PRIVATE src plugin)
-    target_compile_definitions(ELEKTAKT_PluginHostTest PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
-    target_link_libraries(ELEKTAKT_PluginHostTest PRIVATE trig_engine juce::juce_audio_utils juce::juce_audio_processors juce::juce_gui_extra PUBLIC juce::juce_recommended_config_flags)
+    juce_add_console_app(KINETAKT_PluginHostTest PRODUCT_NAME "KINETAKT-PluginHostTest")
+    juce_generate_juce_header(KINETAKT_PluginHostTest)
+    target_sources(KINETAKT_PluginHostTest PRIVATE tests/plugin_host_test.cpp src/ui.cpp)
+    target_include_directories(KINETAKT_PluginHostTest PRIVATE src plugin)
+    target_compile_definitions(KINETAKT_PluginHostTest PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+    target_link_libraries(KINETAKT_PluginHostTest PRIVATE trig_engine juce::juce_audio_utils juce::juce_audio_processors juce::juce_gui_extra PUBLIC juce::juce_recommended_config_flags)
 endif()

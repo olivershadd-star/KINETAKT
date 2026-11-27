@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// ELEKTAKT — Windows application: window, GDI+ drawing, WinMM audio, MIDI in/out.
+// KINETAKT — Windows application: window, GDI+ drawing, WinMM audio, MIDI in/out.
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -434,14 +434,19 @@ public:
         SetTimer(h, 1, 33, nullptr);
     }
     // ----- device persistence -----
-    std::filesystem::path devicesFile() const { return base / L"ELEKTAKT-devices.txt"; }
+    std::filesystem::path devicesFile() const { return base / L"KINETAKT-devices.txt"; }
+    // Devices chosen with ELEKTAKT (before 0.7.1) are taken over once.
+    std::filesystem::path devicesReadFile() const {
+        std::error_code ec;
+        return std::filesystem::exists(devicesFile(), ec) ? devicesFile() : base / L"ELEKTAKT-devices.txt";
+    }
     void saveDevices() {
         std::ofstream f(devicesFile().u8string(), std::ios::trunc);
         if (!f) return;
         f << "audio=" << utf8(audioName) << "\nmidiin=" << utf8(midiInName) << "\nmidiout=" << utf8(midiOutName) << "\n";
     }
     void loadDevices() {
-        std::ifstream f(devicesFile().u8string());
+        std::ifstream f(devicesReadFile().u8string());
         std::string line;
         while (std::getline(f, line)) {
             const auto at = line.find('=');
@@ -515,9 +520,9 @@ public:
         return choice - 1;
     }
     static const wchar_t* filter(const std::string& kind) {
-        if (kind == "project") return L"Projet ELEKTAKT (*.elektakt)\0*.elektakt\0Tous les fichiers\0*.*\0\0";
+        if (kind == "project") return L"Projet KINETAKT (*.kinetakt, *.elektakt)\0*.kinetakt;*.elektakt\0Tous les fichiers\0*.*\0\0";
         if (kind == "kick") return L"Projet KICK (*.kicklab)\0*.kicklab\0Tous les fichiers\0*.*\0\0";
-        if (kind == "kit") return L"Kit KICK / ELEKTAKT (*.kickkit)\0*.kickkit\0Tous les fichiers\0*.*\0\0";
+        if (kind == "kit") return L"Kit KICK / KINETAKT (*.kickkit)\0*.kickkit\0Tous les fichiers\0*.*\0\0";
         return L"Audio WAV (*.wav)\0*.wav\0Tous les fichiers\0*.*\0\0";
     }
     std::string openPath(const std::string& title, const std::string& kind) override {
@@ -541,7 +546,7 @@ public:
         std::copy(s.begin(), s.end(), name.begin());
         const auto t = wide(title);
         const auto initial = (base / L"projets").wstring();
-        const wchar_t* ext = kind == "project" ? L"elektakt" : kind == "kit" ? L"kickkit" : L"wav";
+        const wchar_t* ext = kind == "project" ? L"kinetakt" : kind == "kit" ? L"kickkit" : L"wav";
         OPENFILENAMEW d{};
         d.lStructSize = sizeof(d);
         d.hwndOwner = window;
@@ -555,7 +560,7 @@ public:
         return GetSaveFileNameW(&d) ? utf8(name.data()) : std::string();
     }
     bool confirm(const std::string& question) override {
-        return MessageBoxW(window, wide(question).c_str(), L"ELEKTAKT", MB_YESNO | MB_ICONQUESTION) == IDYES;
+        return MessageBoxW(window, wide(question).c_str(), L"KINETAKT", MB_YESNO | MB_ICONQUESTION) == IDYES;
     }
     void setTitle(const std::string& title) override {
         if (window) SetWindowTextW(window, wide(title).c_str());
@@ -842,7 +847,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command, int show) {
     WNDCLASSW wc{};
     wc.lpfnWndProc = proc;
     wc.hInstance = instance;
-    wc.lpszClassName = L"ANKSLabsELEKTAKT";
+    wc.lpszClassName = L"ANKSLabsKINETAKT";
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
     RegisterClassW(&wc);
@@ -852,7 +857,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR command, int show) {
     const double fit = std::min(1., std::min((work.right - work.left) * .95 / w, (work.bottom - work.top) * .92 / h));
     RECT rect{0, 0, int(w * fit), int(h * fit)};
     AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
-    HWND window = CreateWindowW(wc.lpszClassName, L"ELEKTAKT — ANKS Labs", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
+    HWND window = CreateWindowW(wc.lpszClassName, L"KINETAKT — ANKS Labs", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
                                 rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, instance, nullptr);
     if (!window) return 1;
     ShowWindow(window, show);

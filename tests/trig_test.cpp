@@ -400,7 +400,7 @@ int main(int argc, char** argv) {
         e->trigSetStep(1, 3, st);
         e->trigSetSceneValue(5, 7, TrigDecay, .25);
         e->trigSetSceneAB(5, 9);
-        const auto file = (dir / "v2.elektakt").u8string();
+        const auto file = (dir / "v2.kinetakt").u8string();
         check(e->save(file, error), "v2 save");
         auto f = std::make_unique<Engine>();
         check(f->open(file, error) && error.empty(), "v2 open: " + error);
@@ -442,7 +442,7 @@ int main(int argc, char** argv) {
         }
         check(high >= 2 && low >= 2, "square LFO swings CC between 127 and 0 (" + std::to_string(high) + "/" + std::to_string(low) + ")");
         std::string error;
-        const auto file = (dir / "lfo.elektakt").u8string();
+        const auto file = (dir / "lfo.kinetakt").u8string();
         check(r.engine->save(file, error), "lfo save");
         auto f = std::make_unique<Engine>();
         check(f->open(file, error) && error.empty(), "lfo open: " + error);
@@ -524,7 +524,7 @@ int main(int argc, char** argv) {
         main = 0;
         for (float v : block) main += std::abs(v);
         check(main > 1, "back to the main mix");
-        const auto file = (dir / "outputs.elektakt").u8string();
+        const auto file = (dir / "outputs.kinetakt").u8string();
         r.engine->setTrackOutput(5, 3);
         check(r.engine->save(file, error), "outputs save");
         auto f = std::make_unique<Engine>();
@@ -593,7 +593,7 @@ int main(int argc, char** argv) {
         fx.delayFeedback = .66;
         fx.delayPingPong = false;
         r.engine->setSendFx(fx);
-        const auto file = (dir / "sends.elektakt").u8string();
+        const auto file = (dir / "sends.kinetakt").u8string();
         check(r.engine->save(file, error), "sends save: " + error);
         auto f = std::make_unique<Engine>();
         check(f->open(file, error), "sends open: " + error);

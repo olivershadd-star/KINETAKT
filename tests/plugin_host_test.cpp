@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Loads the built ELEKTAKT.vst3 like a DAW would: buses, sample rates, host
+// Loads the built KINETAKT.vst3 like a DAW would: buses, sample rates, host
 // transport, audio output, separate outputs, state save/restore, editor.
 #include <JuceHeader.h>
 #include <iostream>
@@ -59,7 +59,7 @@ double renderSeconds(juce::AudioPluginInstance& plugin, TestPlayHead& head, doub
 int main(int argc, char** argv) {
     juce::ScopedJuceInitialiser_GUI gui;
     if (argc < 2) {
-        std::cerr << "usage: plugin_host_test path/to/ELEKTAKT.vst3\n";
+        std::cerr << "usage: plugin_host_test path/to/KINETAKT.vst3\n";
         return 2;
     }
     juce::VST3PluginFormat format;
@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
         t.defaultNote = 60;
         source->trigSetTrackConfig(0, t);
         for (int k = 0; k < 16; ++k) source->trigToggle(0, k);
-        const auto file = juce::File::createTempFile(".elektakt");
+        const auto file = juce::File::createTempFile(".kinetakt");
         std::string error;
         check(source->save(file.getFullPathName().toStdString(), error), "MIDI project saved " + juce::String(error));
         juce::MemoryBlock project;
@@ -233,7 +233,7 @@ int main(int argc, char** argv) {
         } host;
         auto engine = std::make_unique<lab::Engine>();
         engine->setHostSync(true);
-        const auto base = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("ELEKTAKT");
+        const auto base = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("KINETAKT");
         trig::TrigUI ui(*engine, host, base.getFullPathName().toStdString());
         ui.loadDemo();
         float block[lab::Block * 2];
@@ -259,6 +259,6 @@ int main(int argc, char** argv) {
         std::cerr << failures << " plugin check(s) failed\n";
         return 1;
     }
-    std::cout << "PASS: ELEKTAKT.vst3 loads, plays in sync, stops, saves and restores its state, opens its editor\n";
+    std::cout << "PASS: KINETAKT.vst3 loads, plays in sync, stops, saves and restores its state, opens its editor\n";
     return 0;
 }

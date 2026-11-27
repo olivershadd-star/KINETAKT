@@ -889,7 +889,7 @@ bool Engine::open(const std::string& path,std::string& error){
     if(at==std::string::npos){trigImportKickSteps();return true;}
     auto patterns=std::make_unique<std::array<TrigPattern,Sequences>>();std::istringstream stream(text.substr(at+1));
     std::array<uint8_t,TrigTracks> outputs{};SendFx sendFx;
-    if(!readTrigSection(stream,*patterns,outputs,sendFx)){trigImportKickSteps();error="Données ELEKTAKT illisibles : séquences KICK importées.";return true;}
+    if(!readTrigSection(stream,*patterns,outputs,sendFx)){trigImportKickSteps();error="Données KINETAKT illisibles : séquences KICK importées.";return true;}
     std::lock_guard<std::mutex> lock(impl->mutex);for(int index=0;index<Sequences;++index)impl->state.sequences[index].trig=(*patterns)[index];impl->state.trackOutput=outputs;impl->state.sendFx=sendFx;
     return true;
 }

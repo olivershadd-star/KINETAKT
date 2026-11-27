@@ -1,4 +1,4 @@
-# ELEKTAKT code style (applied to the sequencer, interface, hosts and tests).
+# KINETAKT code style (applied to the sequencer, interface, hosts and tests).
 BasedOnStyle: LLVM
 IndentWidth: 4
 ColumnLimit: 140

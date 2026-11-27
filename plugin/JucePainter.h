@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Draws the ELEKTAKT interface with juce::Graphics (design coordinates 1600 × 900).
+// Draws the KINETAKT interface with juce::Graphics (design coordinates 1600 × 900).
 #pragma once
 #include <JuceHeader.h>
 #include "ui.hpp"

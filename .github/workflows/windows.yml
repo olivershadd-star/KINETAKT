@@ -1,4 +1,4 @@
-name: ELEKTAKT Windows build
+name: KINETAKT Windows build
 
 # Every push to main is compiled and tested on Windows. When the version in
 # CMakeLists.txt has no release yet, the portable ZIP is published as a new
@@ -24,7 +24,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $match = Select-String -Path CMakeLists.txt -Pattern 'project\(ELEKTAKT VERSION ([0-9.]+)'
+          $match = Select-String -Path CMakeLists.txt -Pattern 'project\(KINETAKT VERSION ([0-9.]+)'
           $version = $match.Matches[0].Groups[1].Value
           $exists = git tag --list "v$version"
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -32,7 +32,7 @@ jobs:
           Write-Host "Version $version — publish: $(-not $exists)"
 
       - name: Configure x64 (application + VST3)
-        run: cmake -S . -B build -A x64 -DELEKTAKT_PLUGIN=ON -DELEKTAKT_PLUGIN_TEST=ON
+        run: cmake -S . -B build -A x64 -DKINETAKT_PLUGIN=ON -DKINETAKT_PLUGIN_TEST=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel 4
@@ -43,15 +43,15 @@ jobs:
       - name: Smoke-test Windows interface
         shell: pwsh
         run: |
-          $process = Start-Process build/Release/ELEKTAKT.exe -ArgumentList "--smoke-test" -PassThru
-          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw "ELEKTAKT did not close by itself" }
-          if ($process.ExitCode -ne 0) { throw "ELEKTAKT exited with $($process.ExitCode)" }
+          $process = Start-Process build/Release/KINETAKT.exe -ArgumentList "--smoke-test" -PassThru
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw "KINETAKT did not close by itself" }
+          if ($process.ExitCode -ne 0) { throw "KINETAKT exited with $($process.ExitCode)" }
 
       - name: Test the VST3 in a minimal host (44.1 / 48 / 96 kHz, sync, state, editor)
         shell: pwsh
         run: |
-          $host_exe = Get-ChildItem build -Recurse -Filter "ELEKTAKT*PluginHostTest*.exe" | Select-Object -First 1
-          & $host_exe.FullName "build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3"
+          $host_exe = Get-ChildItem build -Recurse -Filter "KINETAKT*PluginHostTest*.exe" | Select-Object -First 1
+          & $host_exe.FullName "build/KINETAKT_VST3_artefacts/Release/VST3/KINETAKT.vst3"
           if ($LASTEXITCODE -ne 0) { throw "Plugin host test failed" }
 
       - name: Validate the VST3 with pluginval
@@ -60,7 +60,7 @@ jobs:
           Invoke-WebRequest https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pluginval.zip
           Expand-Archive pluginval.zip -DestinationPath pluginval -Force
           # pluginval is a GUI-subsystem program: wait for it explicitly.
-          $p = Start-Process ./pluginval/pluginval.exe -ArgumentList '--strictness-level','5','--validate-in-process','--timeout-ms','600000','--output-dir','pluginval-logs','build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3' -NoNewWindow -Wait -PassThru
+          $p = Start-Process ./pluginval/pluginval.exe -ArgumentList '--strictness-level','5','--validate-in-process','--timeout-ms','600000','--output-dir','pluginval-logs','build/KINETAKT_VST3_artefacts/Release/VST3/KINETAKT.vst3' -NoNewWindow -Wait -PassThru
           Get-ChildItem pluginval-logs -Recurse -File | ForEach-Object { Get-Content $_.FullName -Tail 40 }
           if ($p.ExitCode -ne 0) { throw "pluginval failed with $($p.ExitCode)" }
 
@@ -69,14 +69,14 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.version.outputs.version }}"
-          $folder = "dist/ELEKTAKT-Windows-x64-$version"
+          $folder = "dist/KINETAKT-Windows-x64-$version"
           New-Item -ItemType Directory -Force "$folder/demo-kit","$folder/samples","$folder/projets" | Out-Null
-          Copy-Item build/Release/ELEKTAKT.exe "$folder/"
+          Copy-Item build/Release/KINETAKT.exe "$folder/"
           New-Item -ItemType Directory -Force "$folder/VST3" | Out-Null
-          Copy-Item -Recurse build/ELEKTAKT_VST3_artefacts/Release/VST3/ELEKTAKT.vst3 "$folder/VST3/"
+          Copy-Item -Recurse build/KINETAKT_VST3_artefacts/Release/VST3/KINETAKT.vst3 "$folder/VST3/"
           Copy-Item demo-kit/*.wav "$folder/demo-kit/"
           Copy-Item LIRE-MOI.txt,README.md,CHANGELOG.md,NOTICES.txt,LICENSE "$folder/"
-          Compress-Archive -Path $folder -DestinationPath "dist/ELEKTAKT-Windows-x64-$version.zip" -Force
+          Compress-Archive -Path $folder -DestinationPath "dist/KINETAKT-Windows-x64-$version.zip" -Force
 
       - name: Publish release
         if: steps.version.outputs.publish == 'true'
@@ -84,16 +84,17 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           target_commitish: ${{ github.sha }}
-          name: ELEKTAKT ${{ steps.version.outputs.version }} — Windows x64
-          prerelease: true
+          name: KINETAKT ${{ steps.version.outputs.version }} — Windows x64
+          prerelease: false
+          make_latest: true
           files: dist/*.zip
           body: |
-            **ELEKTAKT — séquenceur à la Elektron, ANKS Labs.**
+            **KINETAKT — séquenceur à la Elektron, ANKS Labs.**
 
-            Télécharge `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous et extrais-le entièrement.
-            - **Application** : lance `ELEKTAKT.exe`.
-            - **Plugin VST3 pour Ableton** : copie le dossier `VST3/ELEKTAKT.vst3` dans `C:\Program Files\Common Files\VST3`, puis relance l'analyse des plugins dans Live.
+            Télécharge `KINETAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` ci-dessous et extrais-le entièrement.
+            - **Application** : lance `KINETAKT.exe`.
+            - **Plugin VST3 pour Ableton** : copie le dossier `VST3/KINETAKT.vst3` dans `C:\Program Files\Common Files\VST3`, puis relance l'analyse des plugins dans Live.
             Aucune installation. Pour envoyer le MIDI vers Ableton, installe loopMIDI (gratuit) — voir le README.
             Nouveautés : voir CHANGELOG.md (aussi dans le ZIP).
 
-            Download `ELEKTAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` below, extract it and run `ELEKTAKT.exe`. No installation needed.
+            Download `KINETAKT-Windows-x64-${{ steps.version.outputs.version }}.zip` below, extract it and run `KINETAKT.exe`. No installation needed.

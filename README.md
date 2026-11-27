@@ -1,9 +1,9 @@
 <div align="center">
 
-# ELEKTAKT
+# KINETAKT
 ### ELEKTRON-STYLE SEQUENCER · SOUND + MIDI TRACKS · FREE
 
-![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.7.0-EF343E?style=for-the-badge&labelColor=10151E)
+![Status](https://img.shields.io/badge/VERSION-0.7.1-3DDC84?style=for-the-badge&labelColor=10151E)
 ![Windows](https://img.shields.io/badge/WINDOWS-10%20%2F%2011_X64-19B9FF?style=for-the-badge&labelColor=10151E)
 ![VST3](https://img.shields.io/badge/VST3-ABLETON_LIVE-19B9FF?style=for-the-badge&labelColor=10151E)
 ![Licence](https://img.shields.io/badge/LICENCE-AGPL--3.0--or--later-F5C343?style=for-the-badge&labelColor=10151E)
@@ -15,40 +15,42 @@
 
 </div>
 
-![ELEKTAKT — sélection d'un pas et parameter lock de hauteur](docs/apercu.png)
+![KINETAKT — sélection d'un pas et parameter lock de hauteur](docs/apercu.png)
 
-> **FR —** ELEKTAKT est un séquenceur autonome pour Windows, inspiré de la façon de travailler des machines Elektron : des **parameter locks** par pas, des **trig conditions**, une **longueur et une vitesse par piste**, du micro-timing et des retrigs. Chaque piste joue soit un **sample** (avec 4 effets Airwindows), soit des **notes MIDI** envoyées vers Ableton ou un autre logiciel. Il reprend le moteur audio du projet KICK d'ANKS Labs.
+> **FR —** KINETAKT (anciennement ELEKTAKT) est un séquenceur gratuit pour Windows, en application autonome et en **plugin VST3 pour Ableton**, inspiré de la façon de travailler des machines Elektron : des **parameter locks** par pas, des **trig conditions**, une **longueur et une vitesse par piste**, du micro-timing et des retrigs. Chaque piste joue soit un **sample** (avec 4 effets Airwindows), soit des **notes MIDI** envoyées vers Ableton ou un autre logiciel. Il reprend le moteur audio du projet KICK d'ANKS Labs.
 >
-> **EN —** ELEKTAKT is a standalone Windows sequencer inspired by the Elektron workflow: per-step **parameter locks**, **trig conditions**, **per-track length and speed**, micro-timing and retrigs. Each track plays either a **sample** (with four Airwindows effects) or **MIDI notes** sent to Ableton or any other software. It reuses the audio engine of the ANKS Labs KICK project.
+> **EN —** KINETAKT (formerly ELEKTAKT) is a free Windows sequencer, standalone and as a **VST3 plugin for Ableton**, inspired by the Elektron workflow: per-step **parameter locks**, **trig conditions**, **per-track length and speed**, micro-timing and retrigs. Each track plays either a **sample** (with four Airwindows effects) or **MIDI notes** sent to Ableton or any other software. It reuses the audio engine of the ANKS Labs KICK project.
 
 ## 01 // TÉLÉCHARGER ET LANCER — DOWNLOAD & RUN
 
-1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.7.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
-2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `ELEKTAKT.exe`.
-3. Lance **ELEKTAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
+1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `KINETAKT-Windows-x64-0.7.1.zip` (le numéro est dans le nom : prends toujours le plus grand).
+2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `KINETAKT.exe`.
+3. Lance **KINETAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
 
-![ELEKTAKT — scènes et crossfader](docs/apercu-scenes.png)
+![KINETAKT — scènes et crossfader](docs/apercu-scenes.png)
 
 *Windows peut afficher « Windows a protégé votre ordinateur » : clique sur **Informations complémentaires → Exécuter quand même** (le programme n'est pas signé, c'est normal pour un projet gratuit).*
 
-**EN —** Download the latest ZIP from Releases, extract everything, keep `demo-kit` next to `ELEKTAKT.exe` and run it. No installation.
+**EN —** Download the latest ZIP from Releases, extract everything, keep `demo-kit` next to `KINETAKT.exe` and run it. No installation.
 
 ## 02 // DANS ABLETON — THE VST3 PLUGIN
 
-Le ZIP contient aussi **`VST3/ELEKTAKT.vst3`** : le même séquenceur, les mêmes écrans, dans Ableton Live (Live Lite compris).
+Le ZIP contient aussi **`VST3/KINETAKT.vst3`** : le même séquenceur, les mêmes écrans, dans Ableton Live (Live Lite compris).
 
-1. Copie le dossier **`ELEKTAKT.vst3`** dans **`C:\Program Files\Common Files\VST3`**.
+1. Copie le dossier **`KINETAKT.vst3`** dans **`C:\Program Files\Common Files\VST3`**.
 2. Dans Live : **Préférences → Plug-ins → Dossier système VST3 = On**, puis **Relancer l'analyse**.
-3. Dans le navigateur : **Plug-ins → ANKS Labs → ELEKTAKT**, glisse-le sur une **piste MIDI**.
-4. Lance la lecture dans Live : ELEKTAKT suit le **tempo**, la **position** et les **boucles** de Live (bouton **SYNC LIVE**).
+3. Dans le navigateur : **Plug-ins → ANKS Labs → KINETAKT**, glisse-le sur une **piste MIDI**.
+*Tu avais la version **ELEKTAKT** (0.7.0 ou avant) ? C'est le même projet, renommé. Supprime l'ancien dossier `ELEKTAKT.vst3` du dossier VST3 avant de copier `KINETAKT.vst3` : tes sets Live retrouvent le plugin, et tes projets `.elektakt` s'ouvrent toujours.*
+
+4. Lance la lecture dans Live : KINETAKT suit le **tempo**, la **position** et les **boucles** de Live (bouton **SYNC LIVE**).
 
 | Dans Live | Comment faire |
 |:--|:--|
-| **Sorties séparées** | Clic droit sur une piste d'ELEKTAKT → **Sortie audio de la piste** → Sortie 2 à 9. Dans Live, crée une piste audio : **Audio From** = la piste d'ELEKTAKT, puis **ELEKTAKT / Sortie 2…**. Idéal pour enregistrer des stems. |
-| **Pistes MIDI → un synthé de Live** | **SORTIE DES PISTES MIDI = MIDI du plugin**, puis sur la piste du synthé : **MIDI From** = la piste d'ELEKTAKT → **ELEKTAKT**. Live ramène tout ce MIDI sur **un seul canal** : un seul synthé par instance. |
+| **Sorties séparées** | Clic droit sur une piste de KINETAKT → **Sortie audio de la piste** → Sortie 2 à 9. Dans Live, crée une piste audio : **Audio From** = la piste de KINETAKT, puis **KINETAKT / Sortie 2…**. Idéal pour enregistrer des stems. |
+| **Pistes MIDI → un synthé de Live** | **SORTIE DES PISTES MIDI = MIDI du plugin**, puis sur la piste du synthé : **MIDI From** = la piste de KINETAKT → **KINETAKT**. Live ramène tout ce MIDI sur **un seul canal** : un seul synthé par instance. |
 | **Plusieurs synthés** | Choisis un port **loopMIDI** comme sortie : chaque piste MIDI garde son canal (même réglage que l'application). |
 | **Jouer depuis Live** | Les notes reçues jouent la piste sélectionnée, ou les 16 pistes en **mode pads** (RÉGLAGES). Avec REC armé, elles s'enregistrent. |
-| **Sauvegarde** | Patterns, locks, scènes et réglages sont gardés **dans le set Live**. Les samples restent là où ils sont (garde-les en place). Le kit démo, `samples` et `projets` sont dans **Documents\ELEKTAKT**. |
+| **Sauvegarde** | Patterns, locks, scènes et réglages sont gardés **dans le set Live**. Les samples restent là où ils sont (garde-les en place). Le kit démo, `samples` et `projets` sont dans **Documents\KINETAKT**. |
 
 ## 02b // LE SÉQUENCEUR — THE SEQUENCER
 
@@ -82,9 +84,9 @@ Le ZIP contient aussi **`VST3/ELEKTAKT.vst3`** : le même séquenceur, les même
 | **Double-clic** | Sur un potard : retire son lock ou sa valeur de scène, sinon remet la valeur par défaut. |
 | **Mode pads** | **RÉGLAGES → Entrée MIDI : pads** : les notes 36 à 51 (les pads d'un MPK mini, d'un LPD8…) jouent directement les pistes 1 à 16, et s'enregistrent sur la bonne piste avec REC. |
 
-![ELEKTAKT — réverbe et delay partagés (page FX COMMUNS)](docs/apercu-fx.png)
+![KINETAKT — réverbe et delay partagés (page FX COMMUNS)](docs/apercu-fx.png)
 
-![ELEKTAKT — forme d'onde et tranches sur la page SRC](docs/apercu-onde.png)
+![KINETAKT — forme d'onde et tranches sur la page SRC](docs/apercu-onde.png)
 
 **Pistes SON** : pages **SRC** (hauteur, début, fin, volume, pan, avec la forme d'onde), **AMP** (enveloppe ADSR et envois vers les effets partagés), **FX1–FX4** (31 effets Airwindows : filtres, saturations, compresseurs, delays, réverbes, lo-fi…), **LFO** et **FX COMMUNS**. Tout est verrouillable par pas (sauf les réglages du LFO).
 Charge un son par **glisser-déposer** d'un WAV sur la piste, ou clic droit → *Charger un sample*.
@@ -94,11 +96,11 @@ Charge un son par **glisser-déposer** d'un WAV sur la piste, ou clic droit → 
 ## 03 // RELIER À ABLETON — CONNECT TO ABLETON
 
 1. Installe **[loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html)** (gratuit) et crée un port avec le bouton **+**.
-2. Dans ELEKTAKT, clique sur **SORTIE MIDI** et choisis le port loopMIDI. Passe une piste en **MIDI** (bouton SON | MIDI) et choisis son canal (clic droit sur la piste).
-3. Dans Ableton : **Préférences → Link, Tempo & MIDI**, ligne d'entrée loopMIDI : **Piste = On** (notes) et **Sync = On** (horloge). Dans Live, clique sur **EXT** à côté du tempo pour suivre ELEKTAKT.
-4. Sur une piste MIDI d'Ableton : entrée = loopMIDI, canal = celui de la piste ELEKTAKT, **Monitor = In**.
+2. Dans KINETAKT, clique sur **SORTIE MIDI** et choisis le port loopMIDI. Passe une piste en **MIDI** (bouton SON | MIDI) et choisis son canal (clic droit sur la piste).
+3. Dans Ableton : **Préférences → Link, Tempo & MIDI**, ligne d'entrée loopMIDI : **Piste = On** (notes) et **Sync = On** (horloge). Dans Live, clique sur **EXT** à côté du tempo pour suivre KINETAKT.
+4. Sur une piste MIDI d'Ableton : entrée = loopMIDI, canal = celui de la piste KINETAKT, **Monitor = In**.
 
-Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI sont envoyées au moment où le son d'ELEKTAKT sort des haut-parleurs, pour rester calées.
+Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI sont envoyées au moment où le son de KINETAKT sort des haut-parleurs, pour rester calées.
 
 ## 04 // RACCOURCIS — SHORTCUTS
 
@@ -108,13 +110,13 @@ Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI 
 
 | Fichier | Contenu |
 |:--|:--|
-| `.elektakt` | Projet complet : patterns, pistes, locks, song, kits. |
+| `.kinetakt` | Projet complet : patterns, pistes, locks, song, kits. |
 | `.kicklab` | Projet KICK : **FICHIER → Importer un projet KICK** convertit ses pas en trigs. |
 | `.kickkit` | Kit de 16 sons et leurs réglages (compatible KICK). |
 | `.wav` | **FICHIER → Exporter le pattern en WAV** : 1, 2, 4 ou 8 cycles du pattern, 48 kHz / 24 bits. Choisis 4 cycles si tu utilises des conditions (1:4, !1ST…). |
 | `…-T03-….wav` | **FICHIER → Exporter les pistes séparées (stems)** : le mix plus un WAV par piste son, même durée, prêts à glisser dans Ableton ou dans ta banque de loops. |
 
-L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages des macros, du crossfader et des appareils MIDI sont gardés à côté de `ELEKTAKT.exe` (`ELEKTAKT-settings.txt`, `ELEKTAKT-devices.txt`).
+L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages des macros, du crossfader et des appareils MIDI sont gardés à côté de `KINETAKT.exe` (`KINETAKT-settings.txt`, `KINETAKT-devices.txt`).
 
 ## 06 // FEUILLE DE ROUTE — ROADMAP
 
@@ -129,13 +131,14 @@ L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages d
 - [x] Navigateur de sons, rééchantillonnage, découpage en tranches (0.5.0)
 - [x] Version VST3 pour Ableton : synchro Live, sorties séparées, état dans le set (0.6.0)
 - [x] Réverbe et delay partagés avec envois verrouillables, timing à l'échantillon près, ergonomie (0.7.0)
+- [x] Nouveau nom KINETAKT, première version stable (0.7.1)
 
 ## 07 // COMPILER — BUILD FROM SOURCE
 
 Windows, Visual Studio 2022 + CMake (le VST3 télécharge JUCE automatiquement) :
 
 ```powershell
-cmake -S . -B build -A x64 -DELEKTAKT_PLUGIN=ON
+cmake -S . -B build -A x64 -DKINETAKT_PLUGIN=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
@@ -145,7 +148,7 @@ Compilation croisée MinGW : `-DCMAKE_TOOLCHAIN_FILE=tools/mingw.cmake`.
 
 ## 08 // LICENCE & SOURCES
 
-ELEKTAKT est libre et gratuit, sous **AGPL-3.0-or-later**. Il est construit sur le moteur **KICK** d'ANKS Labs, basé sur le code ouvert **AudIO / KICK de Music Tribe** ([0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM), AGPL-3.0), le plugin utilise **[JUCE](https://juce.com)** (AGPLv3), avec les effets **[Airwindows](https://www.airwindows.com/)** de Chris Johnson (MIT) et **AudioFile** d'Adam Stark (MIT). Détails : [NOTICES.txt](NOTICES.txt).
+KINETAKT est libre et gratuit, sous **AGPL-3.0-or-later**. Il est construit sur le moteur **KICK** d'ANKS Labs, basé sur le code ouvert **AudIO / KICK de Music Tribe** ([0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM), AGPL-3.0), le plugin utilise **[JUCE](https://juce.com)** (AGPLv3), avec les effets **[Airwindows](https://www.airwindows.com/)** de Chris Johnson (MIT) et **AudioFile** d'Adam Stark (MIT). Détails : [NOTICES.txt](NOTICES.txt).
 
 L'ergonomie s'inspire des machines **Elektron**. Elektron, Ableton, Behringer, Music Tribe et KICK sont des marques de leurs propriétaires ; ANKS Labs n'est ni affilié à ces fabricants ni approuvé par eux.
 
