@@ -130,7 +130,21 @@ enum TrigParam : uint8_t {
     TrigPitch=0, TrigStart, TrigEnd, TrigAttack, TrigDecay, TrigSustain, TrigRelease, TrigLevel, TrigPan,
     TrigFxFirst=9,                                   // 4 slots x 6 parameters
     TrigCcFirst=TrigFxFirst+InsertSlots*6,           // 33
-    TrigParamCount=TrigCcFirst+TrigMidiCcs           // 41
+    TrigSendReverb=TrigCcFirst+TrigMidiCcs,          // 41: send to the shared reverb
+    TrigSendDelay,                                   // 42: send to the shared delay
+    TrigParamCount                                   // 43
+};
+inline bool trigIsCc(int param){return param>=TrigCcFirst&&param<TrigCcFirst+TrigMidiCcs;}
+inline bool trigIsSend(int param){return param==TrigSendReverb||param==TrigSendDelay;}
+// Shared send effects (Elektron style): one reverb and one delay for all tracks.
+constexpr int DelayDivisions=9;
+const char* delayDivisionName(int division);
+double delayDivisionSteps(int division);           // in sixteenth notes
+struct SendFx {
+    double reverbDecay=.55,reverbSize=.75,reverbTone=.55,reverbReturn=.8;
+    int delayDivision=5;                             // 1/8
+    double delayFeedback=.4,delayTone=.6,delayReturn=.7;
+    bool delayPingPong=true;
 };
 constexpr int trigFxParam(int slot,int parameter){return TrigFxFirst+slot*6+parameter;}
 // Trig conditions. Codes from TrigCondCycleFirst encode the A:B cycles.
@@ -174,6 +188,7 @@ constexpr uint8_t TrigLfoNone=255;
 struct TrigLfo { uint8_t wave=LfoSine, speed=5, mode=LfoFree, destination=TrigLfoNone; int8_t depth=0; };
 struct TrigTrack {
     TrigLfo lfo{};
+    int16_t sendReverb=0,sendDelay=0;                // 0–1000
     TrigTrackType type=TrigTrackType::Audio;
     uint8_t length=16;       // 1–64 steps
     uint8_t speed=1;         // index for trigSpeedFactor
@@ -207,6 +222,8 @@ double trigParamBase(const struct PadEdit& edit,int param);
 void trigParamApply(struct PadEdit& edit,int param,double normalised);
 std::string trigParamName(int param,const struct PadEdit* edit=nullptr);
 std::string trigParamDisplay(int param,double normalised);
+// Base value of any lockable parameter for a track (sound, effects, CC, sends).
+double trigTrackBase(const PadEdit& edit,const TrigTrack& track,int param);
 struct MidiEvent { uint64_t frame=0; uint32_t message=0; };
 
 struct SequenceData {
@@ -269,6 +286,8 @@ struct Snapshot {
     double crossfader=0;      // 0 = scene A, 1 = scene B
     std::array<double,TrigTracks> trigLfo{};   // current LFO outputs (−1..1), for display
     std::array<uint8_t,TrigTracks> trackOutput{}; // plugin: 0 = main mix, 1–8 = separate outputs 2–9
+    SendFx sendFx{};
+    std::array<bool,Sequences> patternUsed{};       // patterns holding at least one step
     bool hostSync=false;
 };
 class Engine {
@@ -357,7 +376,8 @@ public:
     void setRepeatVoice(int pad,int semitones,bool held);
     void holdArpeggioNote(int sourcePad,int note,bool held);
     Snapshot snapshot();
-    void snapshotTo(Snapshot& target);
+    // light = only the selected pattern's sequence data (what the interface draws).
+    void snapshotTo(Snapshot& target,bool light=false);
     // Exactly Block stereo frames; UI waveform copies do not hold render locks.
     void render(float* interleaved);
     bool save(const std::string&,std::string& error);
@@ -404,6 +424,7 @@ public:
     void trigSetSceneAB(int a,int b);
     void setCrossfader(double position);
     void trigSetLfo(int track,const TrigLfo& lfo);
+    void setSendFx(const SendFx& settings);
     // ----- plugin host -----
     // When synced, the host transport drives play/stop, tempo and position.
     void setHostSync(bool enabled);

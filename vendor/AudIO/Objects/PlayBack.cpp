@@ -42,6 +42,7 @@ namespace AudIO
         const int end=std::clamp(int(std::ceil(sliceEnd*maxSamples)),begin+1,maxSamples);
         const double fade=std::min(fadeFrames,(end-begin)/pitchRatio*.5);
         for(uint32_t sample=0;sample<blockSize();++sample){
+            if(startDelay>0){--startDelay;continue;}
             if(mode==FORWARD&&readIndex>=end){if(m_loop.load())readIndex=begin;else{m_playing=false;break;}}
             if(mode==REVERSE&&readIndex<begin){if(m_loop.load())readIndex=end-1;else{m_playing=false;break;}}
             if(mode==FORWARD)readIndex=std::max(readIndex,double(begin));

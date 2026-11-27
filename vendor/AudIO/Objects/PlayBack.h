@@ -38,6 +38,8 @@ namespace AudIO
         void setMute( bool Mute ) { m_mute.store( Mute ); };
         void setLooping( bool Loop ) { m_loop.store( Loop ); };
         void setReverse(bool reverse) { mode=reverse?REVERSE:FORWARD; }
+        // ELEKTAKT: sample-accurate note start inside the next block.
+        void setStartDelay(uint32_t frames) { startDelay=frames; }
 
         float getVolume() { return vp.getParameter( VolumeAndPan::kParamGain ); };
         float getPan() { return vp.getParameter( VolumeAndPan::kParamPan ); };
@@ -57,6 +59,7 @@ namespace AudIO
         std::unique_ptr<AudioFile<float>> m_file;
         std::atomic<bool>                 m_bypass{ false }, m_mute{ false }, m_playing{ false }, m_loop{ false };
         double readIndex{ 0 }, sliceStart{0},sliceEnd{1},pitchRatio{1},fadeFrames{96};
+        uint32_t startDelay{0};
         int maxSamples{0};
 
         VolumeAndPan vp;

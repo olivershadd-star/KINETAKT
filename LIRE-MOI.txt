@@ -6,6 +6,8 @@ DÉMARRER
 2. Lance ELEKTAKT.exe. Un pattern de démonstration est chargé : appuie sur ESPACE.
 3. Clic sur un pas = poser / retirer un trig.
 4. Clic droit sur un pas = le sélectionner, puis tourne un potard = PARAMETER LOCK.
+   Plus rapide : maintiens le clic sur un pas et tourne la molette = lock du dernier potard touché.
+   Double-clic sur un potard = retirer le lock (ou revenir à la valeur par défaut).
    Un pas vide sélectionné qui reçoit un lock devient un TRIGLESS LOCK (cadre rouge).
 5. Page TRIG : probabilité, CONDITION (1:4, FILL, PRE, NEI, 1ST…), micro-timing, retrig.
 6. Chaque piste a sa propre LONGUEUR (1 à 64 pas) et sa VITESSE (2x à 1/8x).
@@ -19,6 +21,9 @@ DÉMARRER
 13. FICHIER > Exporter les pistes séparées : le mix + un WAV par piste, pour tes banques de loops.
 14. SONS : parcours tes WAV (clic = écouter, double-clic = charger), rééchantillonne le pattern
     sur une piste puis DÉCOUPE-le en tranches jouées par les pas.
+15. Page AMP : ENVOI RÉVERBE / ENVOI DELAY (verrouillables par pas). Page FX COMMUNS : la réverbe
+    et le delay partagés par toutes les pistes (le delay suit le tempo, ping-pong possible).
+16. Molette sur le niveau d'une piste (à gauche, à côté de M / S) = régler son volume.
 
 PLUGIN VST3 DANS ABLETON
 1. Copie le dossier VST3\ELEKTAKT.vst3 dans C:\Program Files\Common Files\VST3

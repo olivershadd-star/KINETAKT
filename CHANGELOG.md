@@ -1,5 +1,23 @@
 # ELEKTAKT — versions
 
+## 0.7.0
+- **Effets partagés (envois à la Elektron)** : une réverbe et un delay communs à toutes les pistes.
+  - page **AMP** : potards **ENVOI RÉVERBE** et **ENVOI DELAY** par piste, verrouillables par pas, modulables par scène, slide ou LFO ;
+  - nouvelle page **FX COMMUNS** : réverbe (déclin, taille, timbre, retour, d'après Galactic d'Airwindows) et delay calé sur le tempo (1/32 à 1/2, pointé, triolet ; réinjection, timbre, retour, ping-pong) ;
+  - une seule réverbe pour tout le kit coûte environ 1 % du processeur, contre 5 % par piste pour l'effet « Reverb » en insert (signalé comme lourd dans la liste).
+- **Timing à l'échantillon près** : les trigs audio, le micro-timing et les retrigs ne sont plus arrondis aux blocs de 256 échantillons (5 ms). Dans le plugin, les notes MIDI sortent aussi au bon échantillon (vérifié : 1 échantillon d'écart).
+- **Ergonomie** :
+  - maintiens un pas et tourne la **molette** : le dernier potard touché est verrouillé sur ce pas (comme maintenir un trig sur une Elektron) ;
+  - **double-clic** sur un potard : retire le lock ou la valeur de scène, sinon remet la valeur par défaut ;
+  - **forme d'onde** sur la page SRC avec START / END et les tranches du découpage ;
+  - **vu-mètres** et **niveau** de chaque piste dans la liste (molette sur le niveau) ;
+  - **aide au survol** dans la barre d'état ;
+  - **Ctrl+Z** annule aussi les réglages de son (enveloppe, effets, niveau…) ;
+  - textes plus lisibles (11 points minimum), fenêtre du plugin plus grande par défaut (1440 × 810).
+- **Optimisation** : l'interface ne se redessine plus que quand quelque chose change ; elle ne copie plus que le pattern affiché (au lieu des 16) ; plus aucune allocation mémoire pour le MIDI dans le fil audio.
+- Format de projet v5 (envois et effets partagés) : les projets précédents s'ouvrent toujours.
+- Code source reformaté (clang-format) pour être plus lisible.
+
 ## 0.6.0
 - **Plugin VST3 pour Ableton Live** (éditeur ANKS Labs), avec la même interface que l'application :
   - synchronisé sur Live : lecture, tempo, position et boucles ;

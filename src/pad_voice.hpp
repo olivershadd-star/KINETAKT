@@ -233,6 +233,7 @@ public:
         // explicit KICK loop mode, never by importing or auditioning a WAV.
         setLooping(false);
         gain=edit.gain; // TRIG: every trig starts at its own (possibly locked) level.
+        setStartDelay(nextStartDelay);nextStartDelay=0;
         play(true);tail=effects->tailBlocks();
         envelope=edit.attack<=0?1.:0.;
         envelopeStage=edit.attack<=0?(edit.decay<=0?EnvelopeStage::Sustain:EnvelopeStage::Decay):EnvelopeStage::Attack;
@@ -246,6 +247,7 @@ public:
     void resetMix(){gain=edit.gain;tail=0;envelope=0;envelopeStage=EnvelopeStage::Idle;}
     // Plugin multi-out: the last block of this pad, and whether it leaves the main mix.
     bool direct=false;
+    uint32_t nextStartDelay=0;   // frames before the next trigger sounds (sample-accurate sequencing)
     std::array<std::array<float,lab::Block>,2> capture{};
     void setTrackMix(double levelValue,double panValue){trackLevel=std::clamp(levelValue,0.,1.);trackPan=std::clamp(panValue,-1.,1.);}
     float outputPeak()const{return meterPeak;}

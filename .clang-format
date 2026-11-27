@@ -1,0 +1,21 @@
+# ELEKTAKT code style (applied to the sequencer, interface, hosts and tests).
+BasedOnStyle: LLVM
+IndentWidth: 4
+ColumnLimit: 140
+SortIncludes: Never
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortLambdasOnASingleLine: All
+BreakBeforeBraces: Attach
+IndentCaseLabels: false
+NamespaceIndentation: None
+PointerAlignment: Left
+ReflowComments: false
+SpaceAfterTemplateKeyword: false
+Cpp11BracedListStyle: true
+BinPackArguments: true
+BinPackParameters: true
+AccessModifierOffset: -4

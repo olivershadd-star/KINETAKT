@@ -243,7 +243,8 @@ struct Engine::Impl {
     std::array<int,TrigTracks> trigFlashBlocks{};
     std::array<std::array<bool,128>,16> activeNotes{};
     std::atomic<uint64_t> frames{0};
-    std::mutex midiMutex;std::deque<MidiEvent> midiQueue;
+    // Fixed ring: the audio thread never allocates for MIDI.
+    static constexpr size_t MidiRing=16384;std::mutex midiMutex;std::array<MidiEvent,MidiRing> midiRing{};size_t midiHead=0,midiCount=0;
     bool exporting=false;
     bool hostPlaying=false,multiOut=false;double hostSteps=0,hostBpm=120;
     void trigReposition(double steps);
@@ -260,8 +261,17 @@ struct Engine::Impl {
     void addGlide(int track,int param,double from,double to,double samples);
     double sceneOverride(int track,int param)const{return sceneValue[size_t(track)][size_t(param)];}
     uint64_t blockFrame=0;double blockStartSteps=0,samplesPerStep=6000;
-    void pushMidi(uint64_t frame,uint32_t message){if(exporting)return;std::lock_guard<std::mutex> lock(midiMutex);if(midiQueue.size()<16384)midiQueue.push_back({frame,message});}
-    void resetLocks(int pad){lockedPan[pad]=std::numeric_limits<double>::quiet_NaN();for(auto& slot:lockedFx[pad])slot.fill(-1);}
+    void pushMidi(uint64_t frame,uint32_t message){if(exporting)return;std::lock_guard<std::mutex> lock(midiMutex);if(midiCount<MidiRing){midiRing[(midiHead+midiCount)%MidiRing]={frame,message};++midiCount;}}
+    void resetLocks(int pad){lockedPan[pad]=std::numeric_limits<double>::quiet_NaN();for(auto& slot:lockedFx[pad])slot.fill(-1);if(pad<TrigTracks)lockedSend[size_t(pad)].fill(std::numeric_limits<double>::quiet_NaN());}
+    // Sends: step locks, live values (scenes / slides / LFO) and the shared effects.
+    std::array<std::array<double,2>,TrigTracks> lockedSend{},liveSend{},sendLevel{};
+    std::unique_ptr<AudIO::Buffer<float>> sendBuffer;std::unique_ptr<PadEffects> reverb;
+    std::vector<float> delayLeft,delayRight;size_t delayWrite=0;double delayFrames=12000,delayLowL=0,delayLowR=0;
+    PadEdit reverbEdit;SendFx appliedFx;bool reverbSynced=false;int reverbTail=0,delayTail=0;
+    void processSends();
+    // Sample-accurate retrigs: hits waiting for their frame.
+    struct Hit { uint64_t frame=0; int velocity=0; };
+    std::array<std::array<Hit,8>,TrigTracks> hits{};std::array<int,TrigTracks> hitCount{};
     void trigStart();
     void trigStopped(uint64_t frame);
     void trigBoundary();
@@ -270,7 +280,12 @@ struct Engine::Impl {
     void trigFire(int track,const TrigTrack& tr,const TrigStep& st,long long k,int length,uint64_t frame,double stepSamples,const SequenceData& sequence,bool anySolo);
     Impl():pool(512*Block) {
         for(int pad=0;pad<Pads;++pad)resetLocks(pad);for(auto& t:trigSentCc)t.fill(-1);
-        livePan.fill(std::numeric_limits<double>::quiet_NaN());for(auto& pad:liveFx)for(auto& slot:pad)slot.fill(-1);for(auto& t:sceneValue)t.fill(std::numeric_limits<double>::quiet_NaN());
+        livePan.fill(std::numeric_limits<double>::quiet_NaN());
+        for(auto& t:liveSend)t.fill(std::numeric_limits<double>::quiet_NaN());for(auto& t:lockedSend)t.fill(std::numeric_limits<double>::quiet_NaN());
+        reverbEdit.inserts[0].effect=InsertEffect::Galactic;reverbEdit.inserts[0].bypass=false;
+        for(int slot=1;slot<InsertSlots;++slot)reverbEdit.inserts[size_t(slot)].effect=InsertEffect::None;
+        reverb=std::make_unique<PadEffects>(reverbEdit);
+        delayLeft.assign(size_t(Rate*4),0.f);delayRight.assign(size_t(Rate*4),0.f);for(auto& pad:liveFx)for(auto& slot:pad)slot.fill(-1);for(auto& t:sceneValue)t.fill(std::numeric_limits<double>::quiet_NaN());
         for(auto& pad:appliedEffectAutomation)for(auto& slot:pad)slot.fill(-2);
         AudIO::MemoryPool<float>::get().initialize(pool.data(),512,Block);
         graph=std::make_unique<AudIO::Design>(0,2);
@@ -298,6 +313,7 @@ struct Engine::Impl {
         // with the per-track meters and made short drum hits look too quiet.
         graph->setDesignOutput(bus,true);graph->setBypass(false);graph->prepareToPlay(Rate,Block);
         buffer=std::make_unique<AudIO::Buffer<float>>(0,false,2,true);
+        sendBuffer=std::make_unique<AudIO::Buffer<float>>(0,false,2,true);
     }
     void implColor(int program,int pad){banks[program][pad].edit.color=(pad/4)%4;}
     void cancelPreparedProgram(){
@@ -643,10 +659,13 @@ void Engine::holdArpeggioNote(int sourcePad,int note,bool held){if(sourcePad<0||
 Snapshot Engine::snapshot(){auto holder=std::make_unique<Snapshot>();snapshotTo(*holder);return *holder;}
 // Fills an existing snapshot: plugin hosts run the interface on a 1 MB stack,
 // so the interface never keeps a whole Snapshot on the stack.
-void Engine::snapshotTo(Snapshot& result){
-    {std::lock_guard<std::mutex> lock(impl->mutex);const auto& state=impl->state;result.active=state.active;result.edits=state.edits;result.progress=state.progress;result.sequences=state.sequences;result.programs=state.programs;result.song=state.song;
+void Engine::snapshotTo(Snapshot& result,bool light){
+    {std::lock_guard<std::mutex> lock(impl->mutex);const auto& state=impl->state;result.active=state.active;result.edits=state.edits;result.progress=state.progress;
+     if(light){for(int index=0;index<Sequences;++index){if(index==state.sequence)result.sequences[size_t(index)]=state.sequences[size_t(index)];else{result.sequences[size_t(index)].name=state.sequences[size_t(index)].name;result.sequences[size_t(index)].program=state.sequences[size_t(index)].program;}}}
+     else result.sequences=state.sequences;result.programs=state.programs;result.song=state.song;
      result.tempo=state.tempo;result.volume=state.volume;result.playing=state.playing;result.songPlaying=state.songPlaying;result.noteRepeat=state.noteRepeat;result.arpeggiator=state.arpeggiator;result.repeatDivision=state.repeatDivision;result.step=state.step;result.playBar=state.playBar;result.viewBar=state.viewBar;result.sequence=state.sequence;result.queuedSequence=state.queuedSequence;result.group=state.group;result.queuedGroup=state.queuedGroup;result.program=state.program;result.queuedProgram=state.queuedProgram;result.selectedTrack=state.selectedTrack;result.songLength=state.songLength;result.songPosition=state.songPosition;result.songRepeat=state.songRepeat;result.mixPeak=state.mixPeak;result.peak=state.peak;result.preLimiterPeak=state.preLimiterPeak;result.limiterReductionDb=state.limiterReductionDb;result.trackPeaks=state.trackPeaks;
-     result.trigPlayStep=state.trigPlayStep;result.trigFlash=state.trigFlash;result.fill=state.fill;result.midiClockOut=state.midiClockOut;result.crossfader=state.crossfader;result.trigLfo=state.trigLfo;result.trackOutput=state.trackOutput;result.hostSync=state.hostSync;
+     result.trigPlayStep=state.trigPlayStep;result.trigFlash=state.trigFlash;result.fill=state.fill;result.midiClockOut=state.midiClockOut;result.crossfader=state.crossfader;result.trigLfo=state.trigLfo;result.trackOutput=state.trackOutput;result.hostSync=state.hostSync;result.sendFx=state.sendFx;
+     for(int index=0;index<Sequences;++index){bool used=false;for(const auto& tr:state.sequences[size_t(index)].trig.tracks){for(const auto& st:tr.steps)if(!st.empty()){used=true;break;}if(used)break;}result.patternUsed[size_t(index)]=used;}
      const auto& sequence=state.sequences[state.sequence];const int first=state.viewBar*Steps;result.melody.fill(-1);for(int p=0;p<Pads;++p)for(int step=0;step<Steps;++step)result.pattern[p][step]=sequence.drum[p][first+step];for(int step=0;step<Steps;++step)result.melody[step]=sequence.melody[first+step];}
     {std::lock_guard<std::mutex> lock(impl->metadataMutex);for(int pad=0;pad<Pads;++pad){const auto& bank=impl->banks[result.program][pad];const auto& primary=bank.layers[0];result.names[pad]=primary.name;result.paths[pad]=primary.path;result.waveforms[pad]=primary.waveform;result.durations[pad]=primary.duration;for(int layer=0;layer<PadLayers;++layer){const auto& source=bank.layers[layer];result.layers[pad][layer]={source.name,source.path,source.duration,source.velocityStart,source.velocityEnd,source.reverse,source.loaded};}}}
 }
@@ -694,7 +713,7 @@ void Engine::render(float* out){
     for(int p=0;p<Pads;++p)impl->players[p]->direct=impl->multiOut&&p<TrigTracks&&s.trackOutput[size_t(p)]>0;
     impl->trigRender(anySolo);
     if(s.playing){const int base=std::max(0,s.playBar*Steps+std::max(0,s.step));applyTrackMix(base);applyEffectAutomation(base);}
-    impl->graph->process(*impl->buffer);float mixPeak=0,preLimiterPeak=0;
+    impl->graph->process(*impl->buffer);impl->processSends();float mixPeak=0,preLimiterPeak=0;
     for(int n=0;n<Block;++n){impl->currentVolume+=(float(s.volume)-impl->currentVolume)*.004f;const float master=s.volume==0?0.f:impl->currentVolume;for(int c=0;c<2;++c){float mixed=impl->buffer->getOutputBuffer(c)[n];if(!std::isfinite(mixed))mixed=0;mixPeak=std::max(mixPeak,std::abs(mixed));const float value=mixed*master;out[n*2+c]=value;preLimiterPeak=std::max(preLimiterPeak,std::abs(value));}}
     // Stereo-linked sample peak limiter.  The previous block-wide limiter
     // reduced the complete 5.3 ms block from one isolated transient and then
@@ -869,9 +888,9 @@ bool Engine::open(const std::string& path,std::string& error){
     const auto at=text.find("\nTRIGDATA ");
     if(at==std::string::npos){trigImportKickSteps();return true;}
     auto patterns=std::make_unique<std::array<TrigPattern,Sequences>>();std::istringstream stream(text.substr(at+1));
-    std::array<uint8_t,TrigTracks> outputs{};
-    if(!readTrigSection(stream,*patterns,outputs)){trigImportKickSteps();error="Données ELEKTAKT illisibles : séquences KICK importées.";return true;}
-    std::lock_guard<std::mutex> lock(impl->mutex);for(int index=0;index<Sequences;++index)impl->state.sequences[index].trig=(*patterns)[index];impl->state.trackOutput=outputs;
+    std::array<uint8_t,TrigTracks> outputs{};SendFx sendFx;
+    if(!readTrigSection(stream,*patterns,outputs,sendFx)){trigImportKickSteps();error="Données ELEKTAKT illisibles : séquences KICK importées.";return true;}
+    std::lock_guard<std::mutex> lock(impl->mutex);for(int index=0;index<Sequences;++index)impl->state.sequences[index].trig=(*patterns)[index];impl->state.trackOutput=outputs;impl->state.sendFx=sendFx;
     return true;
 }
 }

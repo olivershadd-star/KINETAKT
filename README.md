@@ -3,7 +3,7 @@
 # ELEKTAKT
 ### ELEKTRON-STYLE SEQUENCER · SOUND + MIDI TRACKS · FREE
 
-![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.6.0-EF343E?style=for-the-badge&labelColor=10151E)
+![Status](https://img.shields.io/badge/STATUS-PREVIEW_0.7.0-EF343E?style=for-the-badge&labelColor=10151E)
 ![Windows](https://img.shields.io/badge/WINDOWS-10%20%2F%2011_X64-19B9FF?style=for-the-badge&labelColor=10151E)
 ![VST3](https://img.shields.io/badge/VST3-ABLETON_LIVE-19B9FF?style=for-the-badge&labelColor=10151E)
 ![Licence](https://img.shields.io/badge/LICENCE-AGPL--3.0--or--later-F5C343?style=for-the-badge&labelColor=10151E)
@@ -23,7 +23,7 @@
 
 ## 01 // TÉLÉCHARGER ET LANCER — DOWNLOAD & RUN
 
-1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.6.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
+1. Ouvre **[la dernière version](../../releases/latest)** et télécharge `ELEKTAKT-Windows-x64-0.7.0.zip` (le numéro est dans le nom : prends toujours le plus grand).
 2. Clic droit sur le ZIP → **Extraire tout**. Garde le dossier `demo-kit` à côté de `ELEKTAKT.exe`.
 3. Lance **ELEKTAKT.exe**. Aucune installation. Un pattern de démonstration est chargé : appuie sur **Espace**.
 
@@ -54,8 +54,8 @@ Le ZIP contient aussi **`VST3/ELEKTAKT.vst3`** : le même séquenceur, les même
 
 | Fonction | Comment faire |
 |:--|:--|
-| **Trig** | Clic sur un pas. Glisser la souris peint plusieurs pas. |
-| **Parameter lock** | **Clic droit** sur un ou plusieurs pas (ils s'entourent de blanc), puis tourne un potard : la valeur ne s'applique qu'à ces pas. Le potard devient rouge, le pas reçoit un point rouge. Clic droit sur le potard = retirer le lock. |
+| **Trig** | Clic sur un pas vide = trig. Clic sur un trig = le retirer (au relâchement). Glisser la souris peint plusieurs pas. |
+| **Parameter lock** | **Clic droit** sur un ou plusieurs pas (ils s'entourent de blanc), puis tourne un potard : la valeur ne s'applique qu'à ces pas. Le potard devient rouge, le pas reçoit un point rouge. Clic droit ou **double-clic** sur le potard = retirer le lock. **Plus rapide** : maintiens le clic sur un pas et tourne la **molette** : le dernier potard touché est verrouillé sur ce pas. |
 | **Trigless lock** | Même geste sur un pas **vide** : il change le son en cours (filtre, effets, pan, CC MIDI…) sans rejouer de note. Cadre rouge. |
 | **Trig conditions** | Page **TRIG**, potard **CONDITION** : `1:2`… `8:8` (joue au passage A sur B), `FILL` / `!FILL` (bouton FILL ou touche F maintenue), `PRE` / `!PRE` (selon le dernier trig conditionnel de la piste), `NEI` / `!NEI` (selon la piste au-dessus), `1ST` / `!1ST` (premier passage). |
 | **Probabilité** | Page TRIG, 0 à 100 % par pas. |
@@ -69,7 +69,8 @@ Le ZIP contient aussi **`VST3/ELEKTAKT.vst3`** : le même séquenceur, les même
 | **Rééchantillonner** | Dans SONS ou clic droit sur une piste : le pattern (1 à 8 cycles) est enregistré dans `samples` et chargé sur la piste. Comme sur une Digitakt, tu peux ensuite le découper et le rejouer. |
 | **Découper (chop)** | Dans SONS, GÉNÉRER ou clic droit sur une piste : le sample est coupé en 8, 16 ou 32 tranches, une par pas (locks START / END), dans l'ordre ou au hasard. |
 | **Copier / coller** | Pas sélectionnés : **COPIER LES PAS** puis sélectionne le pas de départ et **COLLER ICI** (ou Ctrl+C / Ctrl+V). **COPIER PAGE / COLLER PAGE** pour 16 pas d'un coup. Sans sélection, Ctrl+C / Ctrl+V copie la piste entière. |
-| **Annuler** | **Ctrl+Z** annule, **Ctrl+Y** rétablit (64 niveaux) : pas, locks, réglages de piste, scènes. Les réglages de son (sample, effets choisis) ne sont pas concernés. |
+| **Effets partagés** | Page **AMP** : **ENVOI RÉVERBE** et **ENVOI DELAY** de la piste (verrouillables par pas, comme sur une Digitakt). Page **FX COMMUNS** : la réverbe (déclin, taille, timbre, retour) et le delay calé sur le tempo (temps 1/32 à 1/2, réinjection, timbre, retour, ping-pong), partagés par toutes les pistes. Bien plus léger qu'une réverbe en insert sur chaque piste. |
+| **Annuler** | **Ctrl+Z** annule, **Ctrl+Y** rétablit (64 niveaux) : pas, locks, réglages de piste, scènes et réglages de son (enveloppe, effets, niveau…). Le choix du sample n'est pas concerné. |
 | **Longueur / vitesse par piste** | En haut : **LONGUEUR** (1 à 64 pas, molette ou glisser, clic droit = valeurs rapides) et **VITESSE** (2x, 1x, 1/2x, 1/4x, 1/8x). Des pistes de longueurs différentes créent des polyrythmies. |
 | **Longueur maître** | `INF` : les pistes tournent librement et un pattern en attente démarre toutes les 16 pas. Une valeur (1–64) relance toutes les pistes à ce rythme. |
 | **Swing** | 50 à 80 %, appliqué aux pas pairs. |
@@ -77,9 +78,15 @@ Le ZIP contient aussi **`VST3/ELEKTAKT.vst3`** : le même séquenceur, les même
 | **Song** | Bouton SONG : enchaîne des patterns (×1, ×2, ×4), puis « Jouer le song ». |
 | **Macros M1–M8** | Touche un potard, puis clic droit sur une macro → Assigner. **MIDI Learn** pour la piloter avec un LPD8, un MPK mini… |
 | **REC** | Arme REC, lance la lecture et joue sur ton clavier MIDI : les notes s'écrivent sur la piste sélectionnée. |
+| **Niveau des pistes** | Chaque piste son affiche un vu-mètre et son niveau en dB : **molette** sur le niveau pour le régler. |
+| **Double-clic** | Sur un potard : retire son lock ou sa valeur de scène, sinon remet la valeur par défaut. |
 | **Mode pads** | **RÉGLAGES → Entrée MIDI : pads** : les notes 36 à 51 (les pads d'un MPK mini, d'un LPD8…) jouent directement les pistes 1 à 16, et s'enregistrent sur la bonne piste avec REC. |
 
-**Pistes SON** : pages **SRC** (hauteur, début, fin, volume, pan), **AMP** (enveloppe ADSR), **FX1–FX4** (31 effets Airwindows : filtres, saturations, compresseurs, delays, réverbes, lo-fi…) et **LFO**. Tout est verrouillable par pas (sauf les réglages du LFO).
+![ELEKTAKT — réverbe et delay partagés (page FX COMMUNS)](docs/apercu-fx.png)
+
+![ELEKTAKT — forme d'onde et tranches sur la page SRC](docs/apercu-onde.png)
+
+**Pistes SON** : pages **SRC** (hauteur, début, fin, volume, pan, avec la forme d'onde), **AMP** (enveloppe ADSR et envois vers les effets partagés), **FX1–FX4** (31 effets Airwindows : filtres, saturations, compresseurs, delays, réverbes, lo-fi…), **LFO** et **FX COMMUNS**. Tout est verrouillable par pas (sauf les réglages du LFO).
 Charge un son par **glisser-déposer** d'un WAV sur la piste, ou clic droit → *Charger un sample*.
 
 **Pistes MIDI** : page **TRIG** (note, vélocité, longueur) et page **CC MIDI** (8 contrôleurs, numéro réglable à la molette sur le titre) et page **LFO** (vers un des 8 CC). Les notes, les CC verrouillés et l'horloge partent vers la sortie MIDI choisie.
@@ -95,7 +102,7 @@ Le bouton **CLOCK OUT** coupe ou rétablit l'envoi de l'horloge. Les notes MIDI 
 
 ## 04 // RACCOURCIS — SHORTCUTS
 
-`Espace` lecture / stop · `F` maintenu = FILL · `Échap` relâcher la sélection · `Suppr` effacer les locks sélectionnés · `←` `→` pages de pas · `↑` `↓` pistes · `F1`–`F8` pages de potards (TRIG, SRC, AMP, FX1–FX4, LFO) · `R` REC · `Ctrl+S` enregistrer · `Ctrl+O` ouvrir · `Ctrl+N` nouveau · `Ctrl+C` / `Ctrl+V` copier / coller (pas sélectionnés ou piste) · `Ctrl+Z` / `Ctrl+Y` annuler / rétablir · `Maj` + potard = réglage fin.
+`Espace` lecture / stop · `F` maintenu = FILL · `Échap` relâcher la sélection · `Suppr` effacer les locks sélectionnés · `←` `→` pages de pas · `↑` `↓` pistes · `F1`–`F8` pages de potards (TRIG, SRC, AMP, FX1–FX4, LFO ; FX COMMUNS par l'onglet) · `R` REC · `Ctrl+S` enregistrer · `Ctrl+O` ouvrir · `Ctrl+N` nouveau · `Ctrl+C` / `Ctrl+V` copier / coller (pas sélectionnés ou piste) · `Ctrl+Z` / `Ctrl+Y` annuler / rétablir · `Maj` + potard = réglage fin.
 
 ## 05 // FICHIERS — FILES
 
@@ -121,6 +128,7 @@ L'historique des versions est dans [CHANGELOG.md](CHANGELOG.md). Les réglages d
 - [x] Générateur (euclidien, aléatoire, mutation, accidents), export des stems (0.4.0)
 - [x] Navigateur de sons, rééchantillonnage, découpage en tranches (0.5.0)
 - [x] Version VST3 pour Ableton : synchro Live, sorties séparées, état dans le set (0.6.0)
+- [x] Réverbe et delay partagés avec envois verrouillables, timing à l'échantillon près, ergonomie (0.7.0)
 
 ## 07 // COMPILER — BUILD FROM SOURCE
 
