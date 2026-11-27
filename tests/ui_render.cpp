@@ -37,6 +37,7 @@ struct FakeHost:Host{
     std::vector<std::string> midiOutputs()override{return {"loopMIDI Port"};} int midiOutput()override{return 0;} void selectMidiOutput(int)override{}
     void stopAudio()override{} void startAudio()override{} void quit()override{}
 };
+__attribute__((noinline)) static std::unique_ptr<lab::Snapshot> grab(lab::Engine& e){return std::make_unique<lab::Snapshot>(e.snapshot());}
 static void shot(TrigUI& ui,const char* file){
     auto* surface=cairo_image_surface_create(CAIRO_FORMAT_RGB24,DesignWidth,DesignHeight);auto* cr=cairo_create(surface);CairoPainter p(cr);ui.paint(p);cairo_surface_write_to_png(surface,file);cairo_destroy(cr);cairo_surface_destroy(surface);std::cout<<"wrote "<<file<<"\n";
 }
@@ -51,7 +52,7 @@ int main(int argc,char** argv){
     ui.mouseDown(376+3*74+30,280,1,0);                    // right-click step 4 → latch
     ui.page=1;ui.mouseDown(376+20,500,0,0);ui.mouseMove(376+20,460,0);ui.mouseUp(0,0,0); // drag PITCH knob up
     shot(ui,"ui-2-locks.png");
-    auto s=std::make_unique<lab::Snapshot>(engine->snapshot());const auto& st=s->sequences[0].trig.tracks[12].steps[3];
+    auto s=grab(*engine);const auto& st=s->sequences[0].trig.tracks[12].steps[3];
     std::cout<<"bass step 4: trig="<<st.trig<<" locks="<<int(st.lockCount)<<" latched="<<ui.latched.size()<<"\n";
     // Trig page with a condition.
     ui.page=0;ui.wheel(376+4*151+60,520,5,0);shot(ui,"ui-3-trigpage.png");
@@ -59,39 +60,39 @@ int main(int argc,char** argv){
     ui.mouseDown(100,124+15*46+20,0,0);ui.mouseUp(0,0,0);ui.mouseDown(376+330+110,148,0,0);ui.mouseUp(0,0,0);
     ui.mouseDown(376+10,280,0,0);ui.mouseUp(0,0,0);ui.mouseDown(376+74*2+10,280,0,0);ui.mouseUp(0,0,0);ui.page=1;
     shot(ui,"ui-4-midi.png");
-    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"track16 type="<<int(s->sequences[0].trig.tracks[15].type)<<" step1="<<s->sequences[0].trig.tracks[15].steps[0].trig<<"\n";
+    s=grab(*engine);std::cout<<"track16 type="<<int(s->sequences[0].trig.tracks[15].type)<<" step1="<<s->sequences[0].trig.tracks[15].steps[0].trig<<"\n";
     // FX page.
     ui.mouseDown(100,124+0*46+20,0,0);ui.mouseUp(0,0,0);ui.page=3;shot(ui,"ui-5-fx.png");
     // Macro: touch DECAY on track 1 (AMP page), assign it to M1, then turn M1.
     ui.page=2;ui.mouseDown(376+151+40,500,0,0);ui.mouseUp(0,0,0);
     host.answers={0};ui.mouseDown(376+40,760,1,0);
     ui.mouseDown(376+40,760,0,0);ui.mouseMove(376+40,700,0);ui.mouseUp(0,0,0);
-    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"track1 decay after M1="<<s->edits[0].decay<<"\n";
+    s=grab(*engine);std::cout<<"track1 decay after M1="<<s->edits[0].decay<<"\n";
     // Trigless lock on an empty step of track 1 (step 3), then a trig-condition change.
     ui.mouseDown(376+2*74+20,280,1,0);ui.page=2;ui.wheel(376+151+40,500,10,0);
-    s=std::make_unique<lab::Snapshot>(engine->snapshot());const auto& tl=s->sequences[0].trig.tracks[0].steps[2];std::cout<<"step3 trig="<<tl.trig<<" locks="<<int(tl.lockCount)<<"\n";
+    s=grab(*engine);const auto& tl=s->sequences[0].trig.tracks[0].steps[2];std::cout<<"step3 trig="<<tl.trig<<" locks="<<int(tl.lockCount)<<"\n";
     shot(ui,"ui-6-macro-trigless.png");
     // v0.2: slide on a latched step, copy/paste, undo, scenes + crossfader.
     ui.key(KeyEscape,true,0);ui.mouseDown(100,124+12*46+20,0,0);ui.mouseUp(0,0,0);ui.page=0;
     ui.mouseDown(376+20,280,1,0);ui.wheel(376+7*151+60,520,1,0);   // latch step 1, SLIDE = OUI
-    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"slide step1="<<s->sequences[0].trig.tracks[12].steps[0].slide<<"\n";
+    s=grab(*engine);std::cout<<"slide step1="<<s->sequences[0].trig.tracks[12].steps[0].slide<<"\n";
     ui.key('C',true,ModControl);ui.key(KeyEscape,true,0);ui.mouseDown(376+74*1+20,280,1,0);ui.key('V',true,ModControl); // paste on step 2
-    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"pasted step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<" slide="<<s->sequences[0].trig.tracks[12].steps[1].slide<<"\n";
-    ui.key('Z',true,ModControl);s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"after undo step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<"\n";
-    ui.key('Y',true,ModControl);s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"after redo step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<"\n";
+    s=grab(*engine);std::cout<<"pasted step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<" slide="<<s->sequences[0].trig.tracks[12].steps[1].slide<<"\n";
+    ui.key('Z',true,ModControl);s=grab(*engine);std::cout<<"after undo step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<"\n";
+    ui.key('Y',true,ModControl);s=grab(*engine);std::cout<<"after redo step2 trig="<<s->sequences[0].trig.tracks[12].steps[1].trig<<"\n";
     shot(ui,"ui-7-slide.png");
     ui.key(KeyEscape,true,0);ui.mouseDown(376+126+20,670,0,0);ui.mouseUp(0,0,0);          // SCÈNES view
     ui.mouseDown(376+1*75+20,720,0,0);ui.mouseUp(0,0,0);                                  // edit scene 2
     ui.page=2;ui.wheel(376+151+40,500,-30,0);                                              // track 13 DECAY into scene 2
     ui.mouseDown(376+90+400,784,0,0);std::cout<<"fader click: "<<ui.status<<"\n";ui.mouseUp(0,0,0);                                   // crossfader
-    s=std::make_unique<lab::Snapshot>(engine->snapshot());std::cout<<"scene2 values="<<int(s->sequences[0].trig.scenes[1].count)<<" fader="<<s->crossfader<<"\n";
+    s=grab(*engine);std::cout<<"scene2 values="<<int(s->sequences[0].trig.scenes[1].count)<<" fader="<<s->crossfader<<"\n";
     shot(ui,"ui-8-scenes.png");
     // v0.3: LFO page on track 3 → DECAY, depth 60, then play.
     ui.key(KeyEscape,true,0);ui.mouseDown(376+20,670,0,0);ui.mouseUp(0,0,0);
     ui.mouseDown(100,124+2*46+20,0,0);ui.mouseUp(0,0,0);ui.page=7;
     ui.wheel(376+3*151+60,520,2,0);ui.wheel(376+2*151+60,520,60,0);ui.wheel(376+0*151+60,520,1,0);ui.wheel(376+1*151+60,520,-2,0);
     for(int b=0;b<200;++b)engine->render(block);ui.tick();
-    s=std::make_unique<lab::Snapshot>(engine->snapshot());const auto& lf=s->sequences[0].trig.tracks[2].lfo;std::cout<<"lfo dest="<<int(lf.destination)<<" depth="<<int(lf.depth)<<" wave="<<int(lf.wave)<<" out="<<s->trigLfo[2]<<"\n";
+    s=grab(*engine);const auto& lf=s->sequences[0].trig.tracks[2].lfo;std::cout<<"lfo dest="<<int(lf.destination)<<" depth="<<int(lf.depth)<<" wave="<<int(lf.wave)<<" out="<<s->trigLfo[2]<<"\n";
     shot(ui,"ui-9-lfo.png");
     std::cout<<"status: "<<ui.status<<"\n";
     return 0;
